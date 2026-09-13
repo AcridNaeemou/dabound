@@ -20,7 +20,7 @@
   {
    "name": "Map tiles rendered",
    "pass": true,
-   "extra": "28 tiles"
+   "extra": "24 tiles"
   },
   {
    "name": "Jeepney dot markers on the map",
@@ -60,7 +60,7 @@
   {
    "name": "Nearby rows show ETA",
    "pass": true,
-   "extra": "e.g. \"ETA: 3 mins.\""
+   "extra": "e.g. \"ETA: 2 mins.\""
   },
   {
    "name": "ETA is humanised (no seconds)",
@@ -85,7 +85,7 @@
   {
    "name": "Nearby rows show ETA",
    "pass": true,
-   "extra": "e.g. \"ETA: 3 mins.\""
+   "extra": "e.g. \"ETA: 2 mins.\""
   },
   {
    "name": "Tracking shows distance/landmark context",
@@ -120,7 +120,7 @@
   {
    "name": "Jeepney marker moves without refresh",
    "pass": true,
-   "extra": "293,378 → 291,375"
+   "extra": "284,377 → 281,379"
   },
   {
    "name": "Routes tab lists routes",
@@ -428,9 +428,9 @@
    "extra": "0px overflow"
   },
   {
-   "name": "Demo console panel shows on desktop",
+   "name": "No presenter demo console in the product UI",
    "pass": true,
-   "extra": ""
+   "extra": "{\"panel\":false,\"fab\":false,\"drawer\":false}"
   },
   {
    "name": "No unexpected JavaScript errors",

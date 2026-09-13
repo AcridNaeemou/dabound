@@ -10,6 +10,10 @@
  *         node tools/load_demo.js                # loads demo.json, stops after
  *         node tools/load_demo.js --simulate     # + starts the DEV simulators
  *         node tools/load_demo.js --clear        # deletes every route + jeepney
+ *
+ * Against a public deployment that was locked with ADMIN_KEY, pass the key:
+ *         ADMIN_KEY=xxxx node tools/load_demo.js https://dabound.onrender.com --simulate
+ *         node tools/load_demo.js --clear --key=xxxx
  */
 const fs = require('fs');
 const path = require('path');
@@ -18,11 +22,15 @@ const args = process.argv.slice(2);
 const BASE = (args.find((a) => /^https?:/.test(a)) || 'http://127.0.0.1:8080').replace(/\/$/, '');
 const SIMULATE = args.includes('--simulate');
 const CLEAR = args.includes('--clear');
+const KEY = (args.find((a) => a.startsWith('--key=')) || '').slice(6) || process.env.ADMIN_KEY || '';
 
 async function api(method, p, body) {
+  const headers = {};
+  if (body) headers['Content-Type'] = 'application/json';
+  if (KEY) headers['x-admin-key'] = KEY;
   const res = await fetch(BASE + p, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -65,4 +73,15 @@ async function api(method, p, body) {
     }
     console.log(`started ${on} DEV simulator${on === 1 ? '' : 's'} (tap-off per jeepney in the app)`);
   }
-})();
+})().catch((err) => {
+  const msg = String((err && err.message) || err);
+  if (/\b401\b/.test(msg)) {
+    console.error(
+      'This deployment is locked (ADMIN_KEY). Re-run with the key:\n' +
+      '  ADMIN_KEY=<key> node tools/load_demo.js <url> [--simulate]'
+    );
+  } else {
+    console.error(msg);
+  }
+  process.exit(1);
+});

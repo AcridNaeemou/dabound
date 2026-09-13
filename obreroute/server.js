@@ -33,6 +33,21 @@ const SEED_FILE = path.join(DATA_DIR, 'seed.json');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
+/* Durable storage (optional). With SUPABASE_URL + SUPABASE_SERVICE_KEY set, every
+ * change is mirrored into Postgres through Supabase's REST API, so routes, jeepneys
+ * and destinations survive a redeploy, a free-tier spin-down or a wiped disk.
+ * Without them the app keeps using the JSON file in DATA_DIR (local development).
+ * The service_role key stays on the server: the browser never talks to Supabase. */
+const SB_URL = (process.env.SUPABASE_URL || process.env.SUPABASE_PROJECT_URL || '').trim().replace(/\/+$/, '');
+const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '').trim();
+const SB_ON = !!(SB_URL && SB_KEY);
+const SB_TABLES = { routes: 'routes', devices: 'jeepneys', destinations: 'destinations' };
+const storage = {
+  driver: SB_ON ? 'supabase' : 'file',
+  ok: true, loaded: false, dirty: false, pending: 0,
+  lastError: null, lastWriteAt: null, lastLoadAt: null,
+};
+
 // --- tunables (§44, §56, §87) -----------------------------------------------
 const CONFIG = {
   onlineMs: 12000,       // no fix within this window -> connecting
@@ -97,7 +112,7 @@ function heldLandmark(dev, derived) {
 function computeDerived(route, position, sHint, isLoop) {
   const { prep, metrics } = prepFor(route);
   const total = prep.totalM || 0;
-  const pr = Geo.project(prep, position, sHint, 1500);
+  const pr = Geo.project(prep, position, sHint, 1500, isLoop);
   let s = pr.s;
   if (isLoop && total > 0) s = Math.min(s, total);
   const ahead = metrics.filter((m) => m.s > s + 20);
@@ -201,6 +216,7 @@ function snapshot(now) {
       etaRefreshMs: CONFIG.etaRefreshMs,
       hasSimulator: true,
       adminKeyRequired: !!ADMIN_KEY,
+      storage: storagePublic(),
     },
     routes: state.routes,
     destinations: state.destinations,
@@ -211,28 +227,168 @@ function snapshot(now) {
   };
 }
 
-let saveTimer = null;
-function persist() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const out = {
-      savedAt: new Date().toISOString(),
-      routes: state.routes,
-      destinations: state.destinations,
-      devices: state.deviceOrder.map((id) => {
-        const d = state.devices[id];
-        return {
-          id: d.id, name: d.name, routeId: d.routeId, type: d.type, active: d.active,
-          phone: d.phone || '', driver: d.driver || '', color: d.color || null,
-          simulated: !!d.simulated, tracking: !!d.tracking,
-          lastFix: d.lastFix || null, smoothed: d.smoothed || null, s: d.s || 0,
-          speedKmh: d.speedKmh || 0, heading: d.heading || 0, lastUpdated: d.lastUpdated || null,
-        };
-      }),
-    };
-    fs.writeFileSync(STATE_FILE, JSON.stringify(out, null, 1));
-  }, 800);
+function deviceProjection(d) {
+  return {
+    id: d.id, name: d.name, routeId: d.routeId, type: d.type, active: d.active,
+    phone: d.phone || '', driver: d.driver || '', color: d.color || null,
+    simulated: !!d.simulated, tracking: !!d.tracking,
+    lastFix: d.lastFix || null, smoothed: d.smoothed || null, s: d.s || 0,
+    speedKmh: d.speedKmh || 0, heading: d.heading || 0, lastUpdated: d.lastUpdated || null,
+  };
 }
+
+function writeStateFile() {
+  const out = {
+    savedAt: new Date().toISOString(),
+    routes: state.routes,
+    destinations: state.destinations,
+    devices: state.deviceOrder.map((id) => deviceProjection(state.devices[id])),
+  };
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(out, null, 1));
+  } catch (err) {
+    // a read-only or full disk must not take the live app down: it keeps
+    // serving from memory and says so once per failure (hosting safety net)
+    console.error('state save failed (still serving from memory):', err.message);
+  }
+}
+
+let saveTimer = null, cfgTimer = null, posTimer = null;
+
+/* persist() is the single write point of the app: the local file is always kept as
+ * a cache, and the database mirror piggybacks on it — configuration is written a
+ * moment later, the GPS stream only refreshes the last known position. */
+function persist(opts) {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(writeStateFile, 800);
+  if (!SB_ON) return;
+  if (opts && opts.positions) {
+    clearTimeout(posTimer);
+    posTimer = setTimeout(sdSyncPositions, 9000);
+    return;
+  }
+  clearTimeout(cfgTimer);
+  cfgTimer = setTimeout(sdSyncConfig, 700);
+}
+
+/* ---------------------------------------------------------------------------
+ * Supabase mirror (PostgREST over plain fetch — no npm dependencies)
+ * ------------------------------------------------------------------------- */
+function sbErrText(err) { return String((err && err.message) || err).slice(0, 220); }
+
+async function sbReq(method, path, opts) {
+  opts = opts || {};
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const res = await fetch(SB_URL + '/rest/v1/' + path, {
+      method: method,
+      signal: ctrl.signal,
+      headers: Object.assign(
+        { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+        opts.prefer ? { Prefer: opts.prefer } : {}
+      ),
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(method + ' /' + path.split('?')[0] + ' -> HTTP ' + res.status + ' ' + text.slice(0, 160));
+    return text ? JSON.parse(text) : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const sbList = async (table) => (await sbReq('GET', SB_TABLES[table] + '?select=id,data')) || [];
+
+async function sbUpsert(table, rows) {
+  if (!rows.length) return;
+  await sbReq('POST', SB_TABLES[table], { body: rows, prefer: 'resolution=merge-duplicates,return=minimal' });
+}
+
+async function sbDeleteMissing(table, keepIds) {
+  const filter = keepIds.length
+    ? '?id=not.in.(' + keepIds.map((id) => '"' + String(id).replace(/["(),]/g, '') + '"').join(',') + ')'
+    : '?id=not.is.null';
+  await sbReq('DELETE', SB_TABLES[table] + filter, { prefer: 'return=minimal' });
+}
+
+const stamp = () => new Date().toISOString();
+const routeRow = (r) => ({ id: r.id, name: r.name || '', data: r, updated_at: stamp() });
+const destinationRow = (d) => ({ id: d.id, name: d.name || '', data: d, updated_at: stamp() });
+const deviceRow = (d) => ({ id: d.id, name: d.name || '', route_id: d.routeId || null, active: d.active !== false, data: deviceProjection(d), updated_at: stamp() });
+const myDeviceRows = () => state.deviceOrder.map((id) => state.devices[id]).filter(Boolean).map(deviceRow);
+
+let lastStatusKey = '';
+function noteStorageChange() {
+  const key = storage.driver + '|' + storage.ok + '|' + (storage.lastError || '') + '|' + storage.pending;
+  if (key === lastStatusKey) return;
+  lastStatusKey = key;
+  broadcastAll();
+}
+
+/* Write the whole configuration (routes, jeepneys, destinations). Rows deleted in
+ * the app are deleted here too, so the database never drifts from the app. */
+async function sdSyncConfig() {
+  if (!SB_ON || storage.pending) return;
+  if (!storage.loaded) { storage.dirty = true; return; } // never write before we know what the database holds
+  storage.pending++;
+  try {
+    await sbUpsert('destinations', state.destinations.map(destinationRow));
+    await sbDeleteMissing('destinations', state.destinations.map((d) => d.id));
+    await sbUpsert('routes', state.routes.map(routeRow));
+    await sbDeleteMissing('routes', state.routes.map((r) => r.id));
+    await sbUpsert('devices', myDeviceRows());
+    await sbDeleteMissing('devices', state.deviceOrder.slice());
+    storage.ok = true; storage.lastError = null; storage.dirty = false; storage.lastWriteAt = Date.now();
+  } catch (err) {
+    storage.ok = false; storage.lastError = sbErrText(err); storage.dirty = true;
+    console.error('supabase write failed (changes kept in memory, retrying):', storage.lastError);
+  } finally {
+    storage.pending--;
+    noteStorageChange();
+  }
+}
+
+/* The GPS stream only refreshes the last known position of each jeepney, so a
+ * restart shows where they were last seen instead of an empty map. */
+async function sdSyncPositions() {
+  if (!SB_ON || !storage.loaded) return;
+  try {
+    await sbUpsert('devices', myDeviceRows());
+    storage.ok = true; storage.lastError = null; storage.dirty = false; storage.lastWriteAt = Date.now();
+  } catch (err) {
+    storage.ok = false; storage.lastError = sbErrText(err);
+  }
+  noteStorageChange();
+}
+
+async function sdLoad() {
+  const [routes, devices, destinations] = await Promise.all([sbList('routes'), sbList('devices'), sbList('destinations')]);
+  return {
+    routes: routes.map((r) => r.data).filter(Boolean),
+    devices: devices.map((r) => r.data).filter(Boolean),
+    destinations: destinations.map((d) => d.data).filter(Boolean),
+  };
+}
+
+async function sdSeedDestinations() {
+  if (!state.destinations.length) return 0;
+  await sbUpsert('destinations', state.destinations.map(destinationRow));
+  return state.destinations.length;
+}
+
+async function sdReset() {
+  if (!SB_ON) return;
+  await sbReq('DELETE', SB_TABLES.routes + '?id=not.is.null', { prefer: 'return=minimal' });
+  await sbReq('DELETE', SB_TABLES.devices + '?id=not.is.null', { prefer: 'return=minimal' });
+  await sbReq('DELETE', SB_TABLES.destinations + '?id=not.is.null', { prefer: 'return=minimal' });
+  await sdSeedDestinations();
+}
+
+const storagePublic = () => ({
+  driver: storage.driver, ok: storage.ok, loaded: storage.loaded,
+  pending: storage.pending, lastError: storage.lastError, lastWriteAt: storage.lastWriteAt,
+});
 
 function loadState() {
   // The shipped seed is the source of the 16 destinations. A host that mounts an
@@ -254,13 +410,19 @@ function loadState() {
   const devicesCfg =
     saved && Array.isArray(saved.devices) && saved.devices.length ? saved.devices : seed.devices || [];
 
-  state.routes = routes.map((r) => ({ ...r, stops: r.stops || [], path: r.path || [] }));
+  return mountState(routes, destinations, devicesCfg, { source: 'loaded' });
+}
+
+/* Mount a complete state — used by the boot path (local file / seed) and by the
+ * Supabase load, so both produce exactly the same shape in memory. */
+function mountState(routesCfg, destinationsCfg, devicesCfg, opts) {
+  state.routes = (routesCfg || []).map((r) => ({ ...r, stops: r.stops || [], path: r.path || [] }));
   state.routes.forEach((r) => bustRoute(r.id));
-  state.destinations = destinations;
+  state.destinations = (destinationsCfg || []).slice();
 
   state.devices = {};
   state.deviceOrder = [];
-  devicesCfg.forEach((cfg) => {
+  (devicesCfg || []).forEach((cfg) => {
     const dev = {
       id: cfg.id,
       name: cfg.name,
@@ -288,18 +450,20 @@ function loadState() {
   // first load AND survives a backend restart (e.g. Jeepney 01 on Obrero - Bajada).
   let resumed = 0;
   state.deviceOrder.forEach((id) => {
-    const cfg = devicesCfg.find((c) => c.id === id);
+    const cfg = (devicesCfg || []).find((c) => c.id === id);
     if (!cfg) return;
     // seed.json uses "simulate", the persisted state uses "simulated" — honour both
     if (cfg.simulate !== true && cfg.simulated !== true) return;
     const routeObj = state.routes.find((r) => r.id === cfg.routeId);
     if (!routeObj) return;
     const total = prepFor(routeObj).prep.totalM || 1;
-    const seedS = saved && typeof cfg.s === 'number' ? cfg.s / total : 0.1 + Math.random() * 0.3;
+    const seedS = typeof cfg.s === 'number' ? cfg.s / total : 0.1 + Math.random() * 0.3;
     if (startSimulator(id, { seedS: Math.max(0, Math.min(0.95, seedS)) })) resumed++;
   });
   if (resumed) console.log(`resumed ${resumed} demo simulator${resumed > 1 ? 's' : ''}`);
-  console.log(`loaded ${state.routes.length} routes · ${state.deviceOrder.length} devices · ${state.destinations.length} destinations`);
+  console.log(
+    `${(opts && opts.source) || 'loaded'}: ${state.routes.length} routes · ${state.deviceOrder.length} devices · ${state.destinations.length} destinations`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +592,7 @@ function ingestFix(deviceId, fix, opts) {
   });
   while (history.length > 60) history.shift();
 
-  if (opts && opts.announce !== false) persist();
+  if (opts && opts.announce !== false) persist({ positions: true });
   return { ok: true };
 }
 
@@ -659,7 +823,10 @@ function normaliseRoute(body, existing) {
     endPoint: endPoint,
     stops: stops,
     path: path,
-    corridor: corridor.length >= 3 ? corridor : existing && existing.corridor ? existing.corridor : [],
+    // Whatever the body carries is the area — an empty list means "no shaded
+    // corridor". Keeping the old shape here made a drawn area impossible to
+    // clear or edit down (it came back on the next save).
+    corridor: corridor,
     distanceM: Math.round(distanceM),
     isLoop: isLoop,
     createdAt: existing ? existing.createdAt : new Date().toISOString(),
@@ -768,7 +935,16 @@ async function handleApi(req, res, urlPath, query) {
     roadCache.set(key, result);
     return json(res, 200, result);
   }
-  if (route[0] === 'health') return json(res, 200, { ok: true, uptime: process.uptime(), clients: clients.size });
+  if (route[0] === 'health')
+    return json(res, 200, { ok: true, uptime: process.uptime(), clients: clients.size, storage: storagePublic() });
+
+  // Force a write and report where the data lives — handy for troubleshooting a
+  // deployment (behind the ADMIN_KEY guard when one is set).
+  if (route[0] === 'storage' && method === 'POST') {
+    await sdSyncConfig();
+    await sdSyncPositions();
+    return json(res, 200, { ok: storage.ok, storage: storagePublic() });
+  }
 
   // --- routes ---------------------------------------------------------------
   if (route[0] === 'routes') {
@@ -777,6 +953,17 @@ async function handleApi(req, res, urlPath, query) {
       const body = await readBody(req);
       const errors = validateRoute(body);
       if (errors.length) return json(res, 422, { errors: errors });
+      const known = body.id ? state.routes.findIndex((r) => r.id === body.id) : -1;
+      if (known >= 0) {
+        // Same id twice (a retry, a double-tap on Save) updates the route
+        // instead of creating a twin with the same identity.
+        const updated = normaliseRoute(body, state.routes[known]);
+        state.routes[known] = updated;
+        bustRoute(updated.id);
+        persist();
+        broadcastAll();
+        return json(res, 200, { route: updated });
+      }
       const created = normaliseRoute(body, null);
       state.routes.push(created);
       bustRoute(created.id);
@@ -822,7 +1009,23 @@ async function handleApi(req, res, urlPath, query) {
       if (!body.routeId) errors.push('Assign a route to this jeepney.');
       if (!body.type) errors.push('Type is required.');
       if (errors.length) return json(res, 422, { errors: errors });
-      const base = normaliseDevice(body, null);
+      const existing = body.id && state.devices[body.id] ? state.devices[body.id] : null;
+      const base = normaliseDevice(body, existing);
+      if (existing) {
+        // Same id twice: update the jeepney, keep its telemetry (and keep it once
+        // in deviceOrder) unless the assignment really changed.
+        const routeChanged = base.routeId !== existing.routeId;
+        Object.assign(existing, base);
+        if (routeChanged) {
+          existing.s = 0;
+          existing.smoothed = null;
+          existing.lastFix = null;
+          existing.lastUpdated = null;
+        }
+        persist();
+        broadcastAll();
+        return json(res, 200, { device: publicDevice(existing) });
+      }
       const dev = {
         ...base,
         tracking: false,
@@ -849,7 +1052,9 @@ async function handleApi(req, res, urlPath, query) {
 
     if (method === 'POST' && sub === 'location') {
       const body = await readBody(req);
-      const out = ingestFix(id, body);
+      // announce: a real phone fix must schedule the write — otherwise the last
+      // known position never reaches the disk or the database.
+      const out = ingestFix(id, body, { announce: true });
       if (out.error) return json(res, 400, out);
       broadcastLocations(true);
       if (out.skipped) {
@@ -977,8 +1182,16 @@ async function handleApi(req, res, urlPath, query) {
     preparedCache.clear();
     Object.keys(state.devices).forEach((k) => delete state.devices[k]);
     loadState();
+    if (SB_ON) {
+      try {
+        await sdReset();
+        storage.ok = true; storage.lastError = null; storage.lastWriteAt = Date.now();
+      } catch (err) {
+        storage.ok = false; storage.lastError = sbErrText(err);
+      }
+    }
     broadcastAll();
-    return json(res, 200, { ok: true, restored: true });
+    return json(res, 200, { ok: true, restored: true, storage: storagePublic() });
   }
 
   return json(res, 404, { error: 'Unknown endpoint.' });
@@ -1018,19 +1231,97 @@ setInterval(() => {
   if (changed || clients.size) broadcastLocations(true);
 }, CONFIG.serverTickMs);
 
-process.on('SIGTERM', () => {
+/* A redeploy (or a Render spin-down) sends SIGTERM: flush whatever the write
+ * debounces still hold so the last save is never dropped on the floor. */
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   simTimers.forEach((t) => clearInterval(t));
+  simTimers.clear();
+  try {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; writeStateFile(); }
+  } catch (err) {
+    console.error('final local write failed:', err.message);
+  }
+  if (SB_ON && storage.loaded) {
+    const flush = (async () => {
+      if (cfgTimer) { clearTimeout(cfgTimer); cfgTimer = null; }
+      if (posTimer) { clearTimeout(posTimer); posTimer = null; }
+      await sdSyncConfig();
+      await sdSyncPositions();
+    })();
+    await Promise.race([flush.catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
+  }
   server.close(() => process.exit(0));
-});
+  setTimeout(() => process.exit(0), 1000).unref();
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
-loadState();
-server.listen(PORT, HOST, () => {
+async function boot() {
+  loadState(); // instant local start: the file/seed is always available offline
+
+  if (SB_ON) {
+    try {
+      const db = await sdLoad();
+      if (!db.routes.length && !db.devices.length && !db.destinations.length) {
+        storage.loaded = true;
+        const n = await sdSeedDestinations();
+        console.log(`supabase: empty database — wrote the ${n} destination suggestions`);
+      } else {
+        mountState(db.routes, db.destinations, db.devices, { source: 'supabase' });
+        storage.loaded = true;
+        writeStateFile(); // keep the local cache in step with the database
+      }
+      storage.ok = true; storage.lastError = null; storage.lastLoadAt = Date.now();
+    } catch (err) {
+      storage.ok = false; storage.lastError = sbErrText(err); storage.loaded = false;
+      console.error('supabase unreachable — serving from the local state file instead:', storage.lastError);
+      console.error('  (check SUPABASE_URL / SUPABASE_SERVICE_KEY; the app keeps working in memory until it answers)');
+    }
+  }
+
+  server.listen(PORT, HOST, () => {
   console.log(`\n  DaBound backend ready`);
   console.log(`  → http://localhost:${PORT}`);
   console.log(`  data dir: ${DATA_DIR}`);
+  console.log(
+    SB_ON
+      ? `  storage: supabase — ${storage.ok ? 'connected' : 'NOT connected'} (${SB_URL})`
+      : '  storage: local file (set SUPABASE_URL + SUPABASE_SERVICE_KEY to keep data in Postgres)'
+  );
   console.log(
     ADMIN_KEY
       ? '  writes require the ADMIN_KEY you set (reads are public)\n'
       : '  admin area: one tap, no login (spec 3)\n'
   );
-});
+  });
+}
+
+boot();
+
+// if the database was unreachable at boot, keep trying to come back to it
+setInterval(() => {
+  if (!SB_ON || storage.loaded) return;
+  sdLoad()
+    .then((db) => {
+      const empty = !db.routes.length && !db.devices.length && !db.destinations.length;
+      if (!empty) {
+        mountState(db.routes, db.destinations, db.devices, { source: 'supabase (reconnected)' });
+        console.warn('supabase became reachable again — the database is now the source of truth');
+      } else {
+        console.warn('supabase became reachable again — writing this session\'s data into it');
+      }
+      storage.loaded = true; storage.ok = true; storage.lastError = null;
+      return empty ? sdSeedDestinations() : null;
+    })
+    .then(() => { storage.dirty = true; return sdSyncConfig(); })
+    .then(() => broadcastAll())
+    .catch(() => {});
+}, 20000);
+
+// and keep retrying a failed write until it lands
+setInterval(() => {
+  if (SB_ON && storage.loaded && (storage.dirty || !storage.ok)) sdSyncConfig();
+}, 15000);

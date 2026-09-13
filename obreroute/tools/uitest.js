@@ -420,8 +420,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     ok(`No horizontal scrolling at ${w}px (${label})`, overflow <= 1, overflow + 'px overflow');
     if (w === 1440) {
-      const panel = await page.locator('#demo-panel').isVisible();
-      ok('Demo console panel shows on desktop', panel);
+      const leftovers = await page.evaluate(() => ({
+        panel: !!document.getElementById('demo-panel'),
+        fab: !!document.getElementById('demo-fab'),
+        drawer: !!document.getElementById('demo-drawer'),
+      }));
+      ok('No presenter demo console in the product UI', !leftovers.panel && !leftovers.fab && !leftovers.drawer, JSON.stringify(leftovers));
       await shot('desktop-stage');
     }
   }

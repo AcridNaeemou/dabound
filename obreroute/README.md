@@ -27,13 +27,17 @@ On a phone in the same Wi-Fi, open `http://<your-computer-ip>:8080`.
 | Admin console | open `/` → **Are you an admin?** → **Continue as Admin** (no account in the MVP, spec §3/§144) |
 | GPS phone (driver mode) | `/#/driver/dev-01` (also reachable from a jeepney's detail screen) |
 | Sample data (dev/QA only) | `node tools/load_demo.js --simulate` · `node tools/load_demo.js --clear` |
-| Presenter demo tools | side panel on desktop, or open `/#/demo` |
 | Deep links | `/#/map` `/#/nearby` `/#/tracking/dev-01` `/#/routes` `/#/route-detail/<routeId>` `/#/admin-routes` `/#/admin-devices` `/#/admin-live` |
 
 Environment overrides: `PORT` (default `8080`), `HOST` (default `0.0.0.0`), `DATA_DIR` (where live state is
 written — point it at a mounted volume so routes/jeepneys survive restarts) and `ADMIN_KEY` (unset by default,
 so the demo stays one-tap; **set it on a public deployment** and every write needs the shared key while the
 passenger side stays public — DaBound asks for it once per device).
+
+**Database (optional, free):** set `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` and the app mirrors routes,
+jeepneys and destinations into Supabase (Postgres) and loads them back at boot — this is what keeps the data
+when a free host without a disk spins down. Setup is one SQL file and two env vars, no packages to install:
+see **[DEPLOY.md § 6](DEPLOY.md)**.
 
 ### Deploy it — making DaBound public
 
@@ -68,8 +72,10 @@ origins), a writable `DATA_DIR` for `state.json`, and outbound internet for map 
   that physically passes within 400 m of that spot is matched, so a pin also works for a corridor drawn
   after the place list was made. The built-in destination suggestions stay exactly as they were.
 - **Your own location** — the locate button, the nearby "near you" ordering and the arrival banner all use
-  the phone's real position ("You are here" dot, refreshed about every 25 s); declining location keeps every
-  screen working, it only hides the personal bits.
+  the phone's real position ("You are here" dot, refreshed about every 25 s). The Maps tab asks once when it
+  opens, retries with a cheap network fix if a high-accuracy GPS fix times out, and if it still cannot get
+  one it says exactly why under the map (blocked permission, insecure page, no device location) with a
+  **Try again** button. Declining location keeps every screen working, it only hides the personal bits.
 - **"Near Victoria Plaza"** landmark readout in the tracking subtitle — never raw coordinates
 - Connection-lost state: red pill, "Connection lost. Showing the last known location.", last-known marker
   retained, **"ETA unavailable"** instead of a misleading "0 min."
@@ -158,7 +164,7 @@ sampled every ~4 m, reduced with Douglas–Peucker (6 m tolerance) and drawn liv
 4. Open the jeepney → **Open tracking mode** on the cohort member's phone (or press **Simulate**).
 5. Passenger → **I am a user** → search `Victoria Plaza` → choose from **Nearby Jeeps** → **tracking screen**.
 6. Watch the marker glide, `Near …` update, and the ETA recalculate. Nothing is refreshed by hand.
-7. Press **Drop GPS** in the demo console → passenger sees **Connection lost**, `Last updated 33 sec ago`, the last known position, and `ETA unavailable`.
+7. Stop the driver tab (or tap **Stop sharing location** in Driver mode) → passenger sees **Connection lost**, `Last updated 33 sec ago`, the last known position, and `ETA unavailable`.
 
 **The app ships empty.** There are no built-in routes and no built-in jeepneys: the admin draws every
 route and registers every jeepney, and an empty install shows real first-run empty states on every screen
@@ -222,6 +228,9 @@ GPS PHONE  ──POST /api/devices/:id/location (≈2 s)──►  NODE BACKEND 
 ### Data model
 
 ```
+Supabase: routes(id, name, data jsonb, updated_at) · jeepneys(id, name, route_id, active, data jsonb, updated_at) · destinations(id, name, data jsonb, updated_at)
+         (`data` holds the full object below; row-level security on with no policies — only the server's service key can touch them)
+
 Route   { id, name, active, startPoint{lat,lng,name}, endPoint{…}, stops[], path[{lat,lng}], corridor[{lat,lng}], distanceM, isLoop, createdAt }
 Stop    { id, routeId, name, latitude, longitude, order, type: start|stop|landmark|endpoint }
 Device  { id, name, routeId, type, active, phone, position, speedKmh, heading, lastUpdated, … }
@@ -247,9 +256,13 @@ Device  { id, name, routeId, type, active, phone, position, speedKmh, heading, l
 ```bash
 node server.js &                  # keep the backend up
 node tools/uitest.js              # 90-check headless walkthrough (loads the sample data itself)
-node tools/qa_release.js          # 64-check data-flow gate on real telemetry, no simulator
-node tools/qa_browser.js          # 71-check browser gate: two-view sync, offline, arrival, map pick, viewports
+node tools/qa_release.js          # 59-check data-flow gate on real telemetry, no simulator
+node tools/qa_browser.js          # 75-check browser gate: two-view sync, offline, arrival, map pick, corridor, viewports
+node tools/qa_storage.js          # 29-check persistence gate: boot hydrate, positions, disk wipe, outage, reconnect
 ```
+
+`tools/qa_storage.js` starts a local PostgREST stand-in (`tools/mock_supabase.js`), so the whole Supabase
+path is verified without a live project.
 
 `tools/uitest.js` drives the real app in headless Chromium and proves: splash → role → map tiles + markers →
 destination search → nearby ETA → live tracking (**marker moves with no refresh**, `Near <landmark>` shown) →
@@ -272,6 +285,7 @@ jeepney found → the built-in search still works afterwards), and **drawing a r
 | `node tools/uitest.js` | every screen renders, admin CRUD works, tap targets, no console errors |
 | `node tools/qa_release.js` | the data chain with **no simulator**: admin creates route + jeepney → a phone posts real fixes → position/route-progress/distance/smoothed speed/ETA/landmark are asserted against what was sent, outliers and malformed frames are rejected, telemetry silence flips the device offline with its last known fix kept, resume works, reassignment leaves no stale route, loop routes wrap, delete cascades cleanly |
 | `node tools/qa_release.js --verify-persist` | restart the backend, then re-run: routes, jeepneys and assignments survived; ends by wiping the fixtures |
+| `node tools/qa_storage.js` | the persistence path: an empty project gets the destination suggestions, admin-created routes/jeepneys land in the database with their road geometry and last known position, a wiped disk restarts from the database, an unreachable database is reported honestly (`storage.ok:false` + reason) while the app keeps serving, and the session's data is written back when it returns |
 | `node tools/qa_browser.js` | passenger and admin views show the *same* vehicle and both update with no refresh, `Connection lost` + `Last updated N sec ago` appear on both, cold deep links hydrate, the arrival banner fires at 45 m and stays silent at 3 km, a map-dropped pin is matched to the jeepneys that pass it, a dragged line becomes route geometry, five viewports (360/390/393/412/430) have no overflow or hidden content, 44 px targets, SSE subscriptions are released when leaving screens, and the app degrades to the "Unable to connect" banner with the backend down |
 
 Both QA scripts use real telemetry posts (`/api/devices/:id/location`) and never the simulator, so a green
@@ -297,6 +311,6 @@ Requires `playwright` (dev-only): `npm i playwright && npx playwright install ch
 
 - **Foreground GPS only.** Driver mode must stay on screen (spec §60 allows this for the MVP); background tracking is the next step for a real deployment.
 - **Map tiles and road geometry need internet.** Tiles degrade to a labelled grey canvas with a "Map tiles unavailable" note; the route editor falls back to straight-line geometry.
-- **No admin account by design** (spec §3/§144): the launch screen's *Admin* button is the only gate. A real deployment needs authentication before any public use; the `POST /api/admin/login` endpoint is kept for that.
+- **No admin account by design** (spec §3/§144): the launch screen's *Admin* button is the only gate, so a public deployment relies on `ADMIN_KEY` (writes need the shared key, reads stay public). Real authentication is the next step for anything beyond a cohort deployment.
 - **One-way travel on non-loop routes**: when the jeepney reaches the terminal the simulator pauses and restarts from the start; loop routes wrap naturally.
 - **Destination → route mapping is admin/manual data**, not transit routing (§89).

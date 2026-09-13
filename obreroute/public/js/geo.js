@@ -77,20 +77,30 @@
    * routes: we look near the last known progress first and only widen if the
    * jeepney has genuinely moved off that stretch.
    */
-  function project(prep, p, hintS, windowM) {
+  function project(prep, p, hintS, windowM, isLoop) {
     if (!prep.pts.length) return { s: 0, offM: Infinity };
     if (prep.pts.length === 1) return { s: 0, offM: haversine(prep.pts[0], p) };
+
+    var win = windowM || 1500;
+    var hinted = typeof hintS === 'number' && isFinite(hintS);
+    var ranges = hinted
+      ? [[Math.max(0, hintS - win), Math.min(prep.totalM, hintS + win)]]
+      : [[0, prep.totalM]];
+    // On a loop the start and the end are the same corner, so the stretch that
+    // continues across the seam sits beyond s = total. Scan it too, otherwise a
+    // jeepney approaching that corner gets glued to "just started" for its last
+    // stretch of road (the numbers would show a whole lap left instead of metres).
+    if (hinted && isLoop && prep.totalM > 0) {
+      if (hintS - win < 0) ranges.push([prep.totalM + (hintS - win), prep.totalM]);
+      if (hintS + win > prep.totalM) ranges.push([0, hintS + win - prep.totalM]);
+    }
 
     var best = { s: 0, offM: Infinity };
     var pass;
     for (pass = 0; pass < 2; pass++) {
-      var from = 0, to = prep.totalM;
-      if (pass === 0 && typeof hintS === 'number' && isFinite(hintS)) {
-        from = Math.max(0, hintS - (windowM || 1500));
-        to = Math.min(prep.totalM, hintS + (windowM || 1500));
-      } else if (pass === 0) {
-        continue; // no hint -> single global pass
-      }
+      var scan = pass === 0 ? ranges : [[0, prep.totalM]];
+      for (var r = 0; r < scan.length; r++) {
+      var from = scan[r][0], to = scan[r][1];
       for (var i = 1; i < prep.pts.length; i++) {
         var segStart = prep.cum[i - 1], segEnd = prep.cum[i];
         if (segEnd < from || segStart > to) continue;
@@ -110,6 +120,7 @@
         var proj = { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
         var off = haversine(proj, p);
         if (off < best.offM) best = { s: segStart + segLen * t, offM: off };
+      }
       }
       if (best.offM < Infinity && (best.offM < 120 || pass === 1)) break;
       best = { s: 0, offM: Infinity }; // widen and retry globally

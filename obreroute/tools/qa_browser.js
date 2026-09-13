@@ -52,6 +52,13 @@ const ROUTE = {
     { lat: 7.090100, lng: 125.613200 },
     { lat: 7.095171, lng: 125.615267 },
   ],
+  // the shaded route area the admin draws with "Draw Area" (spec 49)
+  corridor: [
+    { lat: 7.085300, lng: 125.616400 },
+    { lat: 7.086800, lng: 125.611300 },
+    { lat: 7.090500, lng: 125.612800 },
+    { lat: 7.095600, lng: 125.615700 },
+  ],
 };
 const DEV = 'qb-dev';
 const prep = Geo.prepare(ROUTE.path);
@@ -345,6 +352,66 @@ async function deviceState() {
     ok('Dragging on the map records a route line', nodes > 2, summary.slice(0, 80));
     ok('The drawn line reports its length', /\d+\.\d+ km/.test(summary), summary.slice(0, 60));
     await page.screenshot({ path: require('path').join(__dirname, '..', 'screenshots', 'uit-drawn-route.png') });
+  }
+
+  /* ------------------------------------------------- corridor underlay ---- */
+  console.log('\n\u2500\u2500 the drawn route area is really shaded (spec 49) \u2500\u2500');
+  {
+    // Vector layers live on a canvas (mapkit sets preferCanvas), so the honest
+    // check is pixels: how much faint ink the overlay canvas carries. A shaded
+    // corridor adds thousands of low-alpha pixels, a bare route line a few hundred.
+    const overlayInk = (sel) => page.evaluate((s) => {
+      const c = document.querySelector(s + ' .leaflet-overlay-pane canvas');
+      if (!c) return -1;
+      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let faint = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] && d[i] <= 50) faint++;
+      return faint;
+    }, sel);
+
+    // 1. a route whose area was removed must not come back (no ghost shape)
+    const bare = { ...ROUTE };
+    delete bare.corridor;
+    await api('POST', '/api/routes', bare);
+    const storedBare = (await api('GET', '/api/routes')).routes.find((r) => r.id === ROUTE.id) || {};
+    ok('Clearing a drawn area sticks (no ghost shape comes back)',
+      (storedBare.corridor || []).length === 0, `${(storedBare.corridor || []).length} corner points stored`);
+
+    await page.goto(BASE + '/#/admin-live', { waitUntil: 'load' });
+    await page.waitForTimeout(3000);
+    const inkBare = await overlayInk('#alm-map');
+
+    // 2. the editor on a route with no area: tap the corners and watch it paint
+    await page.goto(BASE + '/#/admin-route-editor/' + ROUTE.id, { waitUntil: 'load' });
+    await page.waitForTimeout(2600);
+    await page.click('[data-mode="area"]');
+    await page.waitForTimeout(300);
+    const inkBefore = await overlayInk('#re-map');
+    const box = await page.locator('#re-map').boundingBox();
+    let corners = 0;
+    for (const [fx, fy] of [[0.22, 0.28], [0.72, 0.34], [0.48, 0.72], [0.34, 0.58], [0.6, 0.2]]) {
+      if (corners >= 3) break;
+      await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+      await page.waitForTimeout(420);
+      const t = (await page.locator('#re-panel').innerText()).replace(/\s+/g, ' ');
+      corners = +((t.match(/(\d+) corner point/) || [])[1] || 0);
+    }
+    await page.waitForTimeout(800);
+    const summary = (await page.locator('#re-panel').innerText()).replace(/\s+/g, ' ');
+    const inkAfter = await overlayInk('#re-map');
+    ok('Three taps close a route area', corners >= 3 && /corner point/.test(summary), `${corners} corner points · ${summary.slice(0, 60)}`);
+    ok('The corridor is shaded on the editor map, not just stored',
+      inkAfter > inkBefore + 400, `${inkAfter}px vs ${inkBefore}px of faint overlay ink`);
+    await page.screenshot({ path: require('path').join(__dirname, '..', 'screenshots', 'uit-corridor.png') });
+
+    // 3. once the route really has an area, the live map shows it under the jeepneys
+    await api('POST', '/api/routes', ROUTE);
+    await page.goto(BASE + '/#/admin-live', { waitUntil: 'load' });
+    await page.waitForTimeout(3000);
+    const inkShaded = await overlayInk('#alm-map');
+    ok('The live map shades the corridor under the jeepneys',
+      inkShaded > 1200 && inkShaded > inkBare + 800,
+      `shaded=${inkShaded}px vs bare=${inkBare}px of faint overlay ink`);
   }
 
   /* --------------------------------------------------------- viewports ------ */

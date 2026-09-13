@@ -8,3 +8,8 @@ screenshots/uit-*.png
 # Screenshots are documentation only — the server never serves them, so a lean
 # repo can leave them out (the app itself is under 1 MB). Uncomment to skip:
 # screenshots/
+
+# The app itself has no dependencies. A lockfile only appears when local QA
+# tooling (Playwright) is installed — never ship it, or the deploy's `npm install`
+# would pull a 100 MB+ browser stack for nothing.
+package-lock.json

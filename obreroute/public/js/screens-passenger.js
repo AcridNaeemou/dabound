@@ -70,6 +70,7 @@
     var origin = Store.session.userLocation || null;
     var q = '';          // what the reader is typing in the top box
     var open = false;    // destination results showing under the top box
+    var locNote = null;  // { text, retry } shown under the map when locate fails
     var picking = false; // choosing a destination by tapping the map
     var pin = null;      // the spot the reader tapped, before they confirm it
 
@@ -182,7 +183,7 @@
         '<div class="map-frame">' +
           '<div class="map" id="p-map"></div>' +
           '<div class="map-controls">' +
-            '<button class="icon-btn" data-act="locate" aria-label="Locate me">' + window.Icons.crosshair(20) + '</button>' +
+            '<button class="icon-btn" data-act="locate" aria-label="Locate me" aria-busy="false">' + window.Icons.crosshair(20) + '</button>' +
             '<button class="icon-btn' + (picking ? ' picking' : '') + '" data-act="pick" aria-label="Choose a destination on the map">' +
               (picking ? window.Icons.x(20) : window.Icons.pinFilled(20)) +
             '</button>' +
@@ -200,24 +201,65 @@
     }
 
     /* the strip under the map: nearby jeeps for the chosen destination, else tips */
+    function locateNoteHtml() {
+      if (!locNote) return '';
+      return (
+        '<div class="alert" style="margin:0 0 10px">' + window.Icons.alert(16) +
+        '<span>' + UI.esc(locNote.text) + '</span></div>' +
+        (locNote.retry ? '<button class="bar-action quiet" data-act="locate" style="margin:0 0 12px">Try again</button>' : '')
+      );
+    }
+
     function paintUnder() {
       var host = DOM.qs(el, '#p-under');
       if (!host) return;
+      var note = locateNoteHtml();
       var dest = destination();
       if (!dest) {
-        host.innerHTML = UI.tipsCard();
+        host.innerHTML = note + UI.tipsCard();
         return;
       }
       var list = sorted();
       if (!list.length) {
-        host.innerHTML = UI.emptyState(window.Icons.jeep(26), 'No active jeepneys on this route.', 'Tracking starts as soon as a device sends GPS.');
+        host.innerHTML = note + UI.emptyState(window.Icons.jeep(26), 'No active jeepneys on this route.', 'Tracking starts as soon as a device sends GPS.');
         return;
       }
-      host.innerHTML =
+      host.innerHTML = note +
         '<div class="p-under-title">Nearby Jeeps</div>' +
         '<div class="pill-list flush" id="p-jeeps">' + rowsHtml(list) + '</div>' +
         '<button class="bar-action quiet" data-nav="nearby" style="margin-top:10px">See all ' + list.length +
         ' jeepney' + (list.length > 1 ? 's' : '') + '</button>';
+    }
+
+    function setLocating(on) {
+      var btn = DOM.qs(el, '[data-act="locate"]');
+      if (!btn) return;
+      btn.classList.toggle('busy', !!on);
+      btn.setAttribute('aria-busy', on ? 'true' : 'false');
+    }
+
+    /* loud = the reader asked for it, so failures are explained on screen */
+    function askForLocation(loud) {
+      setLocating(true);
+      if (loud) { locNote = null; paintUnder(); }
+      window.GeoLoc.request()
+        .then(function (loc) {
+          origin = loc;
+          Store.session.userLocation = loc;
+          locNote = null;
+          setLocating(false);
+          if (kit) { kit.setUserLocation(loc, 'You are here'); kit.panTo(loc, 15); }
+          var host = DOM.qs(el, '#p-jeeps');
+          if (host) host.innerHTML = rowsHtml(sorted());
+          paintUnder();
+          UI.toast('Showing jeepneys near you');
+        })
+        .catch(function (err) {
+          setLocating(false);
+          if (!loud) return;                       // the quiet first ask never nags
+          locNote = { text: err.message, retry: true };
+          paintUnder();
+        });
     }
 
     function draw() {
@@ -278,6 +320,7 @@
       }
       draw();
       paintPick();
+      if (!Store.session.userLocation && !origin) askForLocation(false);
     }
     function unmountMap() { if (kit) { kit.destroy(); kit = null; } }
 
@@ -364,16 +407,7 @@
             return;
           }
           if (e.target.closest('[data-act="locate"]')) {
-            window.GeoLoc.request()
-              .then(function (loc) {
-                origin = loc;
-                Store.session.userLocation = loc;
-                if (kit) { kit.setUserLocation(loc, 'You are here'); kit.panTo(loc, 15); }
-                var host = DOM.qs(el, '#p-jeeps');
-                if (host) host.innerHTML = rowsHtml(sorted());
-                UI.toast('Showing jeepneys near you');
-              })
-              .catch(function (err) { UI.toast(err.message, 'error'); });
+            askForLocation(true);
             return;
           }
           var card = e.target.closest('[data-device]');
@@ -695,8 +729,9 @@
         if (kit) kit.setUserLocation(loc, 'You are here');
         var shown = !!DOM.qs(cardHost, '#tc-here');
         paintCard(shown ? false : true);   // the arrival banner appears the moment we know you are close
-      }).catch(function () {
+      }).catch(function (err) {
         locDenied = true;                  // location is optional: the screen works without it
+        if (force) UI.toast(err.message, 'error');
       });
     }
 
