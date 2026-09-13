@@ -1,0 +1,10 @@
+# live state — written by the server, never committed
+node_modules/
+data/state.json
+*.log
+.DS_Store
+screenshots/uit-*.png
+
+# Screenshots are documentation only — the server never serves them, so a lean
+# repo can leave them out (the app itself is under 1 MB). Uncomment to skip:
+# screenshots/

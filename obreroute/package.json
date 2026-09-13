@@ -1,0 +1,15 @@
+{
+  "name": "dabound",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DaBound — real-time jeepney tracker (passenger + admin PWA-style web app).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node tools/load_demo.js http://127.0.0.1:8080 --simulate",
+    "test": "node tools/uitest.js",
+    "qa": "node tools/qa_release.js && node tools/qa_browser.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED"
+}

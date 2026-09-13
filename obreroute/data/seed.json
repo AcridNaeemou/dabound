@@ -1,0 +1,177 @@
+{
+ "generatedAt": "2026-09-13T01:50:25.428Z",
+ "routes": [],
+ "destinations": [
+  {
+   "id": "d-abreeza",
+   "name": "Abreeza Mall",
+   "address": "Davao City",
+   "latitude": 7.090399,
+   "longitude": 125.611129,
+   "routeIds": [
+    "r-obrero-bajada",
+    "r-bajada-loop"
+   ]
+  },
+  {
+   "id": "d-sm-lanang",
+   "name": "SM Lanang Premier",
+   "address": "Davao City",
+   "latitude": 7.098973,
+   "longitude": 125.630765,
+   "routeIds": [
+    "r-route-4",
+    "r-bajada-loop"
+   ]
+  },
+  {
+   "id": "d-victoria",
+   "name": "Victoria Plaza",
+   "address": "Davao City",
+   "latitude": 7.086623,
+   "longitude": 125.611763,
+   "routeIds": [
+    "r-obrero-bajada",
+    "r-route-4",
+    "r-bajada-loop"
+   ]
+  },
+  {
+   "id": "d-roxas",
+   "name": "Roxas Night Market",
+   "address": "Davao City",
+   "latitude": 7.070415,
+   "longitude": 125.613373,
+   "routeIds": [
+    "r-acacia",
+    "r-sasa-rcastillo"
+   ]
+  },
+  {
+   "id": "d-peoples-park",
+   "name": "People's Park",
+   "address": "Davao City",
+   "latitude": 7.07104,
+   "longitude": 125.609,
+   "routeIds": [
+    "r-route-4"
+   ]
+  },
+  {
+   "id": "d-city-hall",
+   "name": "Davao City Hall",
+   "address": "Davao City",
+   "latitude": 7.064454,
+   "longitude": 125.607715,
+   "routeIds": [
+    "r-route-4",
+    "r-ecoland"
+   ]
+  },
+  {
+   "id": "d-smdavao",
+   "name": "SM City Davao (Ecoland)",
+   "address": "Davao City",
+   "latitude": 7.048753,
+   "longitude": 125.588808,
+   "routeIds": [
+    "r-ecoland"
+   ]
+  },
+  {
+   "id": "d-matina",
+   "name": "Matina Town Square",
+   "address": "Davao City",
+   "latitude": 7.063788,
+   "longitude": 125.596625,
+   "routeIds": [
+    "r-ecoland"
+   ]
+  },
+  {
+   "id": "d-acacia",
+   "name": "Acacia Hotel",
+   "address": "Davao City",
+   "latitude": 7.099341,
+   "longitude": 125.628168,
+   "routeIds": [
+    "r-acacia",
+    "r-bajada-loop"
+   ]
+  },
+  {
+   "id": "d-gaisano",
+   "name": "Gaisano Mall of Davao",
+   "address": "Davao City",
+   "latitude": 7.077625,
+   "longitude": 125.614147,
+   "routeIds": [
+    "r-acacia",
+    "r-sasa-rcastillo"
+   ]
+  },
+  {
+   "id": "d-doctors",
+   "name": "Davao Doctors Hospital",
+   "address": "Davao City",
+   "latitude": 7.070439,
+   "longitude": 125.60441,
+   "routeIds": [
+    "r-acacia"
+   ]
+  },
+  {
+   "id": "d-sasa",
+   "name": "Sasa Wharf",
+   "address": "Davao City",
+   "latitude": 7.126527,
+   "longitude": 125.662711,
+   "routeIds": [
+    "r-sasa-rcastillo"
+   ]
+  },
+  {
+   "id": "d-lanang",
+   "name": "Lanang",
+   "address": "Davao City",
+   "latitude": 7.098316,
+   "longitude": 125.634662,
+   "routeIds": [
+    "r-sasa-rcastillo"
+   ]
+  },
+  {
+   "id": "d-usep",
+   "name": "USeP Obrero",
+   "address": "Davao City",
+   "latitude": 7.085773,
+   "longitude": 125.616083,
+   "routeIds": [
+    "r-obrero-bajada"
+   ]
+  },
+  {
+   "id": "d-bajada",
+   "name": "Bajada",
+   "address": "Davao City",
+   "latitude": 7.09953,
+   "longitude": 125.6101,
+   "routeIds": [
+    "r-obrero-bajada"
+   ]
+  },
+  {
+   "id": "d-bajada-flyover",
+   "name": "Bajada Flyover",
+   "address": "Davao City",
+   "latitude": 7.095171,
+   "longitude": 125.615267,
+   "routeIds": [
+    "r-obrero-bajada",
+    "r-bajada-loop",
+    "r-sasa-rcastillo"
+   ]
+  }
+ ],
+ "devices": []
+}

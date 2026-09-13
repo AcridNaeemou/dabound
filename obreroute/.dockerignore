@@ -1,0 +1,5 @@
+node_modules
+screenshots
+data/state.json
+.git
+*.log

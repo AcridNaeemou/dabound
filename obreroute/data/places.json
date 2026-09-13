@@ -1,0 +1,97 @@
+{
+ "USeP Obrero": {
+  "lat": 7.085773,
+  "lng": 125.616083,
+  "label": "University of Southeastern Philippines - Obrero Campus, A. I\u00f1igo Street, Barangay 18-B, Po"
+ },
+ "Victoria Plaza": {
+  "lat": 7.086623,
+  "lng": 125.611763,
+  "label": "Victoria Plaza, J. P. Laurel Avenue, Regino Compound, Barangay 20-B, Poblacion District, D"
+ },
+ "Abreeza Mall": {
+  "lat": 7.090399,
+  "lng": 125.611129,
+  "label": "Concierge, J. P. Laurel Avenue, Santo Ni\u00f1o Hilltop, Barangay 20-B, Poblacion District, Dav"
+ },
+ "Bajada Flyover": {
+  "lat": 7.095171,
+  "lng": 125.615267,
+  "label": "Bajada Flyover, Damaso Qui\u00f1ones Road, Sampaguita, Paciano Bangoy, Agdao District, Davao Ci"
+ },
+ "Bajada": {
+  "lat": 7.083566,
+  "lng": 125.612675,
+  "label": "Bajada Suites, J. P. Laurel Avenue, Barangay 18-B, Poblacion District, Davao City, Davao R"
+ },
+ "SM Lanang Premier": {
+  "lat": 7.098973,
+  "lng": 125.630765,
+  "label": "SM Lanang Premier, J. P. Laurel Avenue, San Antonio, Agdao District, Buhangin District, Da"
+ },
+ "Roxas Night Market": {
+  "lat": 7.070415,
+  "lng": 125.613373,
+  "label": "Roxas Night Market, M. Roxas Avenue, Barangay 34-D, Poblacion District, Davao City, Davao "
+ },
+ "Davao City Hall": {
+  "lat": 7.064454,
+  "lng": 125.607715,
+  "label": "City Hall of Davao, San Pedro Street, Barangay 2-A, Poblacion District, Davao City, Davao "
+ },
+ "Gaisano Mall of Davao": {
+  "lat": 7.077625,
+  "lng": 125.614147,
+  "label": "Gaisano Mall of Davao, J. P. Laurel Avenue, Bajada, Poblacion District, Davao City, Davao "
+ },
+ "Matina Town Square": {
+  "lat": 7.063788,
+  "lng": 125.596625,
+  "label": "Matina Town Square, Gravahan, Ma-a, Talomo District, Davao City, Davao Region, 8000, Phili"
+ },
+ "SM City Davao": {
+  "lat": 7.048753,
+  "lng": 125.588808,
+  "label": "SM City Davao, Quimpo Boulevard, Ecoland, 76-A Bucana, Talomo District, Davao City, Davao "
+ },
+ "Acacia Hotel": {
+  "lat": 7.099341,
+  "lng": 125.628168,
+  "label": "Acacia Hotel, J. P. Laurel Avenue, Kalayaan, Lanang, Agdao District, Buhangin District, Da"
+ },
+ "Davao Doctors Hospital": {
+  "lat": 7.070439,
+  "lng": 125.60441,
+  "label": "Davao Doctors Hospital, 118, E. Quirino Avenue, Purok 5, 6-A Saint Jude, Poblacion Distric"
+ },
+ "Sasa Wharf": {
+  "lat": 7.126527,
+  "lng": 125.662711,
+  "label": "Port of Sasa, Sasa, Buhangin District, Davao City, Davao Region, 8000, Philippines"
+ },
+ "Buhangin": {
+  "lat": 7.175736,
+  "lng": 125.582293,
+  "label": "Buhangin District, Davao City, Davao Region, 8000, Philippines"
+ },
+ "Toril": {
+  "lat": 7.026937,
+  "lng": 125.409233,
+  "label": "Toril District, Davao City, Davao Region, 8000, Philippines"
+ },
+ "Calinan": {
+  "lat": 7.190248,
+  "lng": 125.45249,
+  "label": "Calinan Poblacion, Calinan District, Davao City, Davao Region, 8018, Philippines"
+ },
+ "Mintal": {
+  "lat": 7.092402,
+  "lng": 125.501883,
+  "label": "Mintal, Davao City, Davao Region, 8022, Philippines"
+ },
+ "Lanang": {
+  "lat": 7.098316,
+  "lng": 125.634662,
+  "label": "Lanang, Agdao District, Davao City, Davao Region, 8000, Philippines"
+ }
+}

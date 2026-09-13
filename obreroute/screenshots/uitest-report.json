@@ -1,0 +1,457 @@
+{
+ "passed": 90,
+ "total": 90,
+ "results": [
+  {
+   "name": "Splash shows the DaBound wordmark",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Role selection offers user and admin",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Passenger map tab is active",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Map tiles rendered",
+   "pass": true,
+   "extra": "28 tiles"
+  },
+  {
+   "name": "Jeepney dot markers on the map",
+   "pass": true,
+   "extra": "3 markers"
+  },
+  {
+   "name": "Navigational tips card is shown",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Top box is a real search field (spec 179)",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Focusing the top box lists every destination",
+   "pass": true,
+   "extra": "16 destinations"
+  },
+  {
+   "name": "Results are tied to what is typed",
+   "pass": true,
+   "extra": "1 results for \"victoria\""
+  },
+  {
+   "name": "The chosen destination fills the search box",
+   "pass": true,
+   "extra": "\"Victoria Plaza\""
+  },
+  {
+   "name": "Nearby jeepneys list under the map",
+   "pass": true,
+   "extra": "3 rows"
+  },
+  {
+   "name": "Nearby rows show ETA",
+   "pass": true,
+   "extra": "e.g. \"ETA: 3 mins.\""
+  },
+  {
+   "name": "ETA is humanised (no seconds)",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Rows use the reference colour dot",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Destination context shown (\"To:\" pill)",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Nearby jeep list is populated",
+   "pass": true,
+   "extra": "4 rows"
+  },
+  {
+   "name": "Nearby rows show ETA",
+   "pass": true,
+   "extra": "e.g. \"ETA: 3 mins.\""
+  },
+  {
+   "name": "Tracking shows distance/landmark context",
+   "pass": true,
+   "extra": "\"Jeepney 01 · Traditional · Near USeP Obrero\""
+  },
+  {
+   "name": "“Near [landmark]” is displayed",
+   "pass": true,
+   "extra": "\"Jeepney 01 · Traditional · Near USeP Obrero\""
+  },
+  {
+   "name": "Tracking card shows ETA",
+   "pass": true,
+   "extra": "\"2 mins.\""
+  },
+  {
+   "name": "Tracking card shows distance",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Tracking card shows average speed",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Tracking status pill visible",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Jeepney marker moves without refresh",
+   "pass": true,
+   "extra": "293,378 → 291,375"
+  },
+  {
+   "name": "Routes tab lists routes",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Live updates keep the list scroll position",
+   "pass": true,
+   "extra": "133px held"
+  },
+  {
+   "name": "Route detail shows stops",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Route detail shows the Start/End box",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Saved tab is an honest placeholder",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Saved tab keeps the bottom navigation",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Admin entry asks for no password (spec 3)",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Admin entry is a single tap",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Settings holds exactly two buttons",
+   "pass": true,
+   "extra": "Route List / Jeepney Info"
+  },
+  {
+   "name": "Settings are Route List + Jeepney Info",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Admin stats render",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Route list renders every route",
+   "pass": true,
+   "extra": "6 routes"
+  },
+  {
+   "name": "Route list has the navy search band",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Route rows carry the active jeepney count",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Admin lists keep their scroll position too",
+   "pass": true,
+   "extra": "list fits the viewport"
+  },
+  {
+   "name": "Route detail lists stops and jeepneys",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Admin stop rows avoid raw coordinates",
+   "pass": true,
+   "extra": "0 raw coordinate rows"
+  },
+  {
+   "name": "Editor collects start, stop and endpoint",
+   "pass": true,
+   "extra": "3 points"
+  },
+  {
+   "name": "Stop name is captured from the dialog",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Generate Path builds a driving path",
+   "pass": true,
+   "extra": "3 points · 145 path nodes · 4.7 km"
+  },
+  {
+   "name": "Editor exposes a Draw Area tool",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Route area lists its corner points",
+   "pass": true,
+   "extra": "Route area | 3 corner points · shaded corridor on the map"
+  },
+  {
+   "name": "Corridor corner handles are draggable markers",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Undo steps back one area point",
+   "pass": true,
+   "extra": "Route area | 2 corner points · add 1 more to close"
+  },
+  {
+   "name": "Redo puts it back",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "New route is saved and listed",
+   "pass": true,
+   "extra": "1 match(es)"
+  },
+  {
+   "name": "Saved route keeps its corridor polygon",
+   "pass": true,
+   "extra": "corridor=3"
+  },
+  {
+   "name": "Leaving a dirty editor asks first",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Delete confirmation mentions the unassigned jeepneys",
+   "pass": true,
+   "extra": "Delete route?  This cannot be undone. Any jeepneys on this route are unassigned — their de"
+  },
+  {
+   "name": "Jeepney survives its route being deleted",
+   "pass": true,
+   "extra": "routeId=null"
+  },
+  {
+   "name": "…and is left without a route",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Jeepney list rows show live status",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Device detail shows route + near + speed",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Driver mode shows the driver header",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Driver mode reports location sharing state",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Simulated jeepneys are labelled DEV",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Route search shows a real empty state",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "ETA falls back to calculating / unavailable, never NaN",
+   "pass": true,
+   "extra": "ETA calculating… / ETA unavailable"
+  },
+  {
+   "name": "ETA + distance use commuter language",
+   "pass": true,
+   "extra": "< 1 min. / 150 m away / 1.2 km away"
+  },
+  {
+   "name": "No horizontal overflow at 360px /#/map",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 360px /#/nearby",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 360px /#/admin-routes",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 360px /#/admin-devices",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 390px /#/map",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 390px /#/nearby",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 390px /#/admin-routes",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 390px /#/admin-devices",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 412px /#/map",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 412px /#/nearby",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 412px /#/admin-routes",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "No horizontal overflow at 412px /#/admin-devices",
+   "pass": true,
+   "extra": "overflow=0px"
+  },
+  {
+   "name": "Every app tap target is at least 44px tall",
+   "pass": true,
+   "extra": "all good"
+  },
+  {
+   "name": "Live map renders markers",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Selecting a device shows its card",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Connection-lost alert appears",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "“Last updated” age is shown",
+   "pass": true,
+   "extra": "Last updated 33 sec ago"
+  },
+  {
+   "name": "Status pill switches to Connection lost",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Last known position is retained on the map",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "No horizontal scrolling at 360px (small)",
+   "pass": true,
+   "extra": "0px overflow"
+  },
+  {
+   "name": "No horizontal scrolling at 412px (large)",
+   "pass": true,
+   "extra": "0px overflow"
+  },
+  {
+   "name": "No horizontal scrolling at 1440px (desktop)",
+   "pass": true,
+   "extra": "0px overflow"
+  },
+  {
+   "name": "Demo console panel shows on desktop",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "No unexpected JavaScript errors",
+   "pass": true,
+   "extra": "clean"
+  },
+  {
+   "name": "Reset leaves the app empty (no built-in routes or jeepneys)",
+   "pass": true,
+   "extra": "0 routes · 0 jeepneys"
+  },
+  {
+   "name": "Empty Route List shows the first-run state",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "name": "Empty Jeepney Info shows the first-run state",
+   "pass": true,
+   "extra": ""
+  }
+ ],
+ "errors": []
+}
