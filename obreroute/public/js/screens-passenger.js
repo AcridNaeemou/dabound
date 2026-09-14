@@ -183,15 +183,14 @@
     function render() {
       el.innerHTML =
         '<div class="search-wrap">' +
-          '<header class="appbar searchable">' +
-            '<button class="back-chevron" data-nav="exit" aria-label="Back to the launch screen">' + window.Icons.chevLeft(26) + '</button>' +
-            '<span class="appbar-lead brand-lead">' + window.Brand.jeepArt('#173B5C', 30) + '</span>' +
-            '<input id="p-search" class="search-field" type="search" autocomplete="off" enterkeyhint="search"' +
+          '<div class="search-ribbon">' +
+            '<button class="ribbon-exit" data-nav="exit" aria-label="Back to the launch screen">' + window.Icons.chevLeft(22) + '</button>' +
+            '<span class="ribbon-icon">' + window.Icons.search(18) + '</span>' +
+            '<input id="p-search" class="ribbon-input" type="search" autocomplete="off" enterkeyhint="search"' +
               ' placeholder="Madayaw!" aria-label="Search your destination"' +
               ' value="' + UI.esc(destination() ? destination().name : '') + '" />' +
-            '<button class="clear" data-act="clear-search" aria-label="Clear" hidden>' + window.Icons.x(18) + '</button>' +
-            '<span class="search-pin">' + window.Icons.pinFilledYellow(20) + '</span>' +
-          '</header>' +
+            '<button class="ribbon-clear" data-act="clear-search" aria-label="Clear" hidden>' + window.Icons.x(16) + '</button>' +
+          '</div>' +
           '<div class="search-drop" id="p-drop" hidden></div>' +
         '</div>' +
         '<div class="map-frame">' +
@@ -916,15 +915,16 @@
     function render() {
       el.innerHTML =
         '<div class="search-wrap">' +
-          '<header class="appbar searchable">' +
-            '<button class="back-chevron" data-nav="exit" aria-label="Back to the launch screen">' + window.Icons.chevLeft(26) + '</button>' +
-            '<input id="r-search" class="search-field" type="search" autocomplete="off"' +
+          '<div class="search-ribbon">' +
+            '<button class="ribbon-exit" data-nav="exit" aria-label="Back to the launch screen">' + window.Icons.chevLeft(22) + '</button>' +
+            '<span class="ribbon-icon">' + window.Icons.search(18) + '</span>' +
+            '<input id="r-search" class="ribbon-input" type="search" autocomplete="off"' +
               ' placeholder="Search a route or a stop" aria-label="Search routes"' +
               ' value="' + UI.esc(q) + '" />' +
-            '<button class="clear" data-act="clear-search" aria-label="Clear"' + (q ? '' : ' hidden') + '>' + window.Icons.x(18) + '</button>' +
-            '<button class="icon-btn' + (howto ? ' on' : '') + '" data-act="toggle-howto" aria-label="How to ride"' +
+            '<button class="ribbon-clear" data-act="clear-search" aria-label="Clear"' + (q ? '' : ' hidden') + '>' + window.Icons.x(16) + '</button>' +
+            '<button class="ribbon-info' + (howto ? ' on' : '') + '" data-act="toggle-howto" aria-label="How to ride"' +
               ' aria-expanded="' + howto + '" aria-controls="r-howto">' + window.Icons.info(20) + '</button>' +
-          '</header>' +
+          '</div>' +
         '</div>' +
         '<div class="scroll" id="r-scroll" style="padding:6px 14px 16px">' +
           '<div id="r-howto" class="container pad howto-box"' + (howto ? '' : ' hidden') + '>' +

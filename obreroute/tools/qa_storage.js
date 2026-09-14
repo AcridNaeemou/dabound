@@ -59,7 +59,9 @@ function startMock() {
 
 function startApp(dataDir) {
   const c = spawn('node', [path.join(ROOT, 'server.js')], {
-    env: { ...process.env, PORT: String(APP_PORT), HOST: '127.0.0.1', DATA_DIR: dataDir, SUPABASE_URL: SB_URL, SUPABASE_SERVICE_KEY: MOCK_KEY },
+    // ADMIN_KEY=none keeps this harness on the open one-tap admin path; the
+    // PIN-locked behaviour is covered by the targeted gate tests instead.
+    env: { ...process.env, ADMIN_KEY: 'none', PORT: String(APP_PORT), HOST: '127.0.0.1', DATA_DIR: dataDir, SUPABASE_URL: SB_URL, SUPABASE_SERVICE_KEY: MOCK_KEY },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';

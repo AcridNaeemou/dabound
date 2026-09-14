@@ -154,6 +154,12 @@
     return L.divIcon({ className: 'mk', html: '<div class="mk-stop"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
   }
 
+  /* A small grab-handle for one vertex of the drawn line. Deliberately plainer
+   * than a stop marker so "the line's shape" and "where it stops" read differently. */
+  function vertexIcon() {
+    return L.divIcon({ className: 'mk', html: '<div class="mk-vertex"></div>', iconSize: [14, 14], iconAnchor: [7, 7] });
+  }
+
   /* The reader's own position is a blue dot with a pulsing halo — the universal
    * "you are here" idiom. The destination stays a yellow teardrop pin, so the two
    * can never be mistaken for one another on a busy map. */
@@ -204,6 +210,7 @@
     var userMarker = null;
     var destMarker = null;
     var drawLayer = L.layerGroup().addTo(map);
+    var handleLayer = L.layerGroup().addTo(map);   // draggable line vertices
     var markers = {};
     var flags = { tilesBroken: false };
 
@@ -423,6 +430,20 @@
           m.addTo(drawLayer);
         });
       },
+
+      /** Draggable handles on every vertex of the drawn line, so an admin can
+       *  pull the line into shape instead of re-drawing it. `onDragEnd(i, latlng)`
+       *  reports which vertex moved and where it landed. */
+      drawPathHandles: function (path, o) {
+        o = o || {};
+        handleLayer.clearLayers();
+        (path || []).forEach(function (p, i) {
+          var m = L.marker([p.lat, p.lng], { icon: vertexIcon(), draggable: true, zIndexOffset: 500 });
+          m.on('dragend', function () { if (o.onDragEnd) o.onDragEnd(i, m.getLatLng()); });
+          m.addTo(handleLayer);
+        });
+      },
+      clearPathHandles: function () { handleLayer.clearLayers(); },
 
       resize: function () { map.invalidateSize(); },
 

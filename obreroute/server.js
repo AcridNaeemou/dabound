@@ -50,9 +50,12 @@ const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
 // DATA_DIR lets a host mount a persistent volume anywhere (or point at a disk)
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
-// ADMIN_KEY is optional: unset -> the demo stays one-tap (spec §3). Set it on a
-// public deployment and every write needs the shared key (reads stay open).
-const ADMIN_KEY = process.env.ADMIN_KEY || '';
+// The admin area is unlocked with a simple shared PIN. It defaults to ObreRoute so
+// every deployment is PIN-protected out of the box; ADMIN_KEY overrides it, and
+// ADMIN_KEY=none opens the demo back up to one-tap admin (spec §3) for local work.
+// Reads stay public either way; writes and admin entry need the PIN.
+const RAW_ADMIN_KEY = process.env.ADMIN_KEY || '';
+const ADMIN_KEY = RAW_ADMIN_KEY === 'none' ? '' : (RAW_ADMIN_KEY || 'ObreRoute');
 const SEED_FILE = path.join(DATA_DIR, 'seed.json');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -966,6 +969,18 @@ async function handleApi(req, res, urlPath, query) {
     }
   }
 
+  // Entry gate for the admin UI. The write-gate above only asks for the key when
+  // something is saved, which let anyone open the admin screens and read them.
+  // This authenticated ping lets the client demand the key before it shows any
+  // admin screen at all. Public when no ADMIN_KEY is set (spec §3 one-tap).
+  if (route[0] === 'admin' && route[1] === 'verify') {
+    if (!ADMIN_KEY) return json(res, 200, { ok: true, locked: false });
+    const supplied = req.headers['x-admin-key'] || query.get('key') || '';
+    return supplied === ADMIN_KEY
+      ? json(res, 200, { ok: true, locked: true })
+      : json(res, 401, { error: 'This DaBound deployment is locked. Enter the admin key.', adminKeyRequired: true });
+  }
+
   // --- realtime stream ------------------------------------------------------
   if (route[0] === 'events') {
     res.writeHead(200, {
@@ -1409,7 +1424,7 @@ async function boot() {
   );
   console.log(
     ADMIN_KEY
-      ? '  writes require the ADMIN_KEY you set (reads are public)\n'
+      ? '  admin area is PIN-locked (reads are public); writes need the PIN\n'
       : '  admin area: one tap, no login (spec 3)\n'
   );
   });

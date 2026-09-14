@@ -46,31 +46,85 @@
 
   /* --------------------------------------------------------------- login */
   function adminLoginScreen() {
-    var el = DOM.el(
-      '<div class="screen plain">' +
-        '<div style="display:flex;justify-content:center;padding:26px 0 6px">' + window.Brand.mark(null, 30) + '</div>' +
-        '<div class="screen-title">Admin tools</div>' +
-        '<div class="scroll pad" style="padding-top:0">' +
-          '<div class="card">' +
-            '<div class="t-body" style="margin-bottom:16px">Create routes, assign jeepneys, watch the map.</div>' +
-            '<button class="bar-action" data-act="continue">' + window.Icons.shield(18) + ' Continue as Admin</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>'
-    );
+    var el = DOM.el('<div class="screen plain"></div>');
+    var renderedLocked = null;
+
+    function locked() {
+      return !!(Store.state && Store.state.config && Store.state.config.adminKeyRequired);
+    }
 
     function openAdmin() {
       sessionStorage.setItem('dabound.admin', JSON.stringify({ name: 'ADMIN 67' }));
       window.Router.reset('admin-profile');
     }
 
+    function render() {
+      // Remember what we drew so a live store push only re-renders when the lock
+      // state actually flips — re-rendering on every push would wipe a half-typed
+      // PIN and any "wrong PIN" message.
+      renderedLocked = locked();
+      var head =
+        '<div style="display:flex;justify-content:center;padding:26px 0 6px">' + window.Brand.mark(null, 30) + '</div>';
+      if (!locked()) {
+        el.innerHTML =
+          head +
+          '<div class="screen-title">Admin tools</div>' +
+          '<div class="scroll pad" style="padding-top:0">' +
+            '<div class="card">' +
+              '<div class="t-body" style="margin-bottom:16px">Create routes, assign jeepneys, watch the map.</div>' +
+              '<button class="bar-action" data-act="continue">' + window.Icons.shield(18) + ' Continue as Admin</button>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+      el.innerHTML =
+        head +
+        '<div class="screen-title">Admin PIN</div>' +
+        '<div class="scroll pad" style="padding-top:0">' +
+          '<div class="card" style="padding:18px 16px 16px">' +
+            '<div class="t-body" style="margin-bottom:14px">Enter the shared admin PIN to unlock routes, jeepneys and places.</div>' +
+            '<input class="input plain" id="al-pin" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"' +
+              ' placeholder="Admin PIN" aria-label="Admin PIN" style="text-align:center;letter-spacing:1px" />' +
+            '<div id="al-err"></div>' +
+            '<button class="bar-action" data-act="unlock" style="margin-top:12px">' + window.Icons.shield(18) + ' Unlock</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function fail(msg) {
+      var err = DOM.qs(el, '#al-err');
+      var input = DOM.qs(el, '#al-pin');
+      if (err) err.innerHTML = '<div class="alert" style="margin-top:10px">' + window.Icons.alert(16) + '<span>' + UI.esc(msg) + '</span></div>';
+      if (input) { input.value = ''; input.focus(); }
+    }
+
+    function tryUnlock() {
+      var input = DOM.qs(el, '#al-pin');
+      var pin = input ? (input.value || '').trim() : '';
+      if (!pin) { fail('Type the admin PIN first.'); return; }
+      window.API.checkAdminKey(pin)
+        .then(function (ok) {
+          if (!ok) { fail('Wrong PIN — try again.'); return; }
+          try { localStorage.setItem('dabound.key', pin); } catch (e) { /* private mode */ }
+          openAdmin();
+        })
+        .catch(function () { fail('Could not reach the server. Try again.'); });
+    }
+
     return {
       el: el,
       mount: function () {
+        render();
         el.addEventListener('click', function (e) {
           if (e.target.closest('[data-act="continue"]')) openAdmin();
+          if (e.target.closest('[data-act="unlock"]')) tryUnlock();
         });
+        el.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && e.target.id === 'al-pin') tryUnlock();
+        });
+        setTimeout(function () { var p = DOM.qs(el, '#al-pin'); if (p) p.focus(); }, 60);
       },
+      update: function () { if (locked() !== renderedLocked) render(); },
     };
   }
 
@@ -375,11 +429,22 @@
       return draft.path.length > 1 ? d : 0;
     }
 
+    /* Which segment of the line a distance-along-path `s` falls inside, so a new
+     * vertex can be squeezed in between the right pair of existing points. */
+    function segmentIndexAt(prep, s) {
+      for (var i = 1; i < prep.cum.length; i++) {
+        if (s <= prep.cum[i]) return i - 1;
+      }
+      return Math.max(0, prep.cum.length - 2);
+    }
+
     function hintText() {
       if (draft.mode === 'start') return 'Tap the map to place the route start.';
       if (draft.mode === 'stop') return 'Tap the map to add a stop / landmark.';
       if (draft.mode === 'endpoint') return 'Tap the map to place the endpoint (same as start = loop route).';
       if (draft.mode === 'draw') return 'Drag on the map to draw the road line, or tap to drop single points.';
+      if (draft.mode === 'edit') return 'Drag the red handles to reshape the line, or tap the line to squeeze a new point in between.';
+      if (draft.mode === 'erase') return 'Tap the line where a section is wrong — only that part is removed, the rest of the line stays.';
       if (draft.mode === 'area') return 'Tap around the edges of the route area. Three or more points close the shaded corridor.';
       return 'Choose a tool below, then tap the map. Generate Path snaps the route to real roads.';
     }
@@ -473,6 +538,8 @@
           '<button class="bar-action" data-mode="stop">' + window.Icons.plus(17) + ' Add Stop / Landmark</button>' +
           '<button class="bar-action" data-mode="endpoint">' + window.Icons.flag(17) + ' Set Endpoint</button>' +
           '<button class="bar-action" data-mode="draw">' + window.Icons.pencil(17) + ' Draw Route</button>' +
+          '<button class="bar-action" data-mode="edit">' + window.Icons.target(17) + ' Edit Line</button>' +
+          '<button class="bar-action" data-mode="erase">' + window.Icons.trash(17) + ' Erase Part</button>' +
           '<button class="bar-action" data-mode="area">' + window.Icons.polygon(17) + ' Draw Area</button>' +
             '<button class="bar-action quiet" data-act="generate">' + window.Icons.routeIcon(17) + ' Generate Path</button>' +
           '</div>' +
@@ -697,6 +764,21 @@
           paintPoints();
         },
       });
+      // In Edit Line mode every vertex of the drawn line gets a draggable handle,
+      // so the line itself can be pulled into shape (not just the stops).
+      if (draft.mode === 'edit' && draft.path.length) {
+        kit.drawPathHandles(draft.path, {
+          onDragEnd: function (i, latlng) {
+            pushHistory();
+            draft.path[i].lat = latlng.lat;
+            draft.path[i].lng = latlng.lng;
+            paintPoints();
+            paintMap();
+          },
+        });
+      } else if (kit.clearPathHandles) {
+        kit.clearPathHandles();
+      }
     }
 
     function fitDraft() {
@@ -718,6 +800,51 @@
         paintPoints();
         paintMap();
         if (draft.corridor.length === 3) UI.toast('Area closed — keep tapping to refine the corridor, drag handles to adjust');
+        return;
+      }
+      if (draft.mode === 'edit') {
+        if (draft.path.length < 2) { UI.toast('Draw the line first, then edit it'); return; }
+        // Snap the tap onto the line (nearest point along it) rather than using the
+        // raw tap, so the squeezed-in vertex lands exactly on the stroke instead of
+        // a few pixels off it.
+        var prepE = Geo.prepare(draft.path);
+        var prE = Geo.project(prepE, latlng, null, null);
+        var ptE = Geo.pointAt(prepE, prE.s);
+        var at = segmentIndexAt(prepE, prE.s);
+        pushHistory();
+        draft.path.splice(at + 1, 0, { lat: ptE.lat, lng: ptE.lng });
+        paintPoints();
+        paintMap();
+        UI.toast('Point squeezed in — drag the red handles to shape it');
+        return;
+      }
+      if (draft.mode === 'erase') {
+        if (draft.path.length < 2) { UI.toast('There is no line to erase yet'); return; }
+        // A brush measured ALONG the line, not a per-point delete: one tap lifts the
+        // whole run of vertices around it, so a wrong wiggle goes without redrawing
+        // the route. The ends are always kept so the route stays a route.
+        var BRUSH_M = 45;
+        var prep = Geo.prepare(draft.path);
+        var s0 = Geo.project(prep, latlng, null, null).s;
+        // Centre the brush on the nearer end-vertex of the tapped segment, so a tap
+        // anywhere on a stroke always lifts that vertex (and any neighbours inside
+        // the brush) instead of falling harmlessly between two sparse points.
+        var seg = segmentIndexAt(prep, s0);
+        var sC = (s0 - prep.cum[seg]) <= (prep.cum[seg + 1] - s0) ? prep.cum[seg] : prep.cum[seg + 1];
+        var keep = [];
+        var removed = 0;
+        for (var vi = 0; vi < draft.path.length; vi++) {
+          var isEnd = vi === 0 || vi === draft.path.length - 1;
+          if (!isEnd && Math.abs(prep.cum[vi] - sC) <= BRUSH_M) { removed++; continue; }
+          keep.push(draft.path[vi]);
+        }
+        if (!removed) { UI.toast('Nothing within ' + BRUSH_M + ' m of that tap along the line'); return; }
+        if (keep.length < 2) { UI.toast('That would erase the whole line — the rest of the route is kept instead'); return; }
+        pushHistory();
+        draft.path = keep;
+        paintPoints();
+        paintMap();
+        UI.toast('Removed ' + removed + ' point' + (removed > 1 ? 's' : '') + ' — Undo brings them back');
         return;
       }
       pushHistory();
@@ -897,7 +1024,7 @@
         // the map box is measured a frame later, so fit after it has a size
         requestAnimationFrame(function () {
           fitDraft();
-          setTimeout(fitDraft, 150);
+          setTimeout(function () { fitDraft(); if (kit) kit.invalidate(); }, 150);
         });
         commit();
         // Unsaved-changes guard (spec 89) — the back chevron asks first.
@@ -922,6 +1049,10 @@
             draft.mode = draft.mode === modeBtn.dataset.mode ? null : modeBtn.dataset.mode;
             paintTools();
             paintMap();
+            // The panel above the map changes height as tools come and go; without
+            // a resize pass Leaflet keeps a stale container rect and tap->latlng
+            // drifts away from where the line visibly is.
+            if (kit && kit.invalidate) kit.invalidate();
             // bring the map back into view so the next tap lands on it
             var frame = DOM.qs(el, '.map-frame');
             if (frame && draft.mode) {

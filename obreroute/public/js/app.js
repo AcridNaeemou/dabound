@@ -37,6 +37,32 @@
   var currentName = null;
   var depth = 0;
 
+  /* A locked deployment (ADMIN_KEY set) must ask for the key before showing any
+   * admin screen — including direct deep links — not only when a write fails.
+   * The check is an authenticated ping rather than a flag read from the store, so
+   * it cannot be bypassed by landing on a deep link before the store hydrates.
+   * Driver mode is excluded: the phone posts GPS and holds no key. */
+  var adminUnlocked = false;
+  function ensureAdminUnlocked() {
+    if (adminUnlocked) return Promise.resolve(true);
+    // Silent check of any saved PIN. Deliberately not verifyAdminKey(): that goes
+    // through the shared wrapper, which pops the key modal on a 401 — here we want
+    // a quiet "no" so the reader is sent to the PIN screen instead.
+    var stored = '';
+    try { stored = localStorage.getItem('dabound.key') || ''; } catch (e) { /* private mode */ }
+    // Always ask the server, even with no saved PIN: an open deployment answers
+    // locked:false and lets the reader straight through, a locked one answers 401
+    // and sends them to the PIN screen.
+    return window.API.checkAdminKey(stored).then(function (ok) {
+      adminUnlocked = !!ok;
+      return adminUnlocked;
+    });
+  }
+  window.ensureAdminUnlocked = ensureAdminUnlocked;
+  function needsAdminGate(target) {
+    return target.indexOf('admin-') === 0 && target !== 'admin-login' && !adminUnlocked;
+  }
+
   function parseHash() {
     var raw = (location.hash || '').replace(/^#\/?/, '');
     if (!raw) return null;
@@ -55,6 +81,25 @@
     opts = opts || {};
     var spec = SCREENS[target];
     if (!spec) return;
+    if (needsAdminGate(target)) {
+      var lockedHost = document.getElementById('screen-host');
+      if (current && current.unmount) {
+        try { current.unmount(); } catch (e) { console.warn(e); }
+      }
+      current = null;
+      currentName = null;
+      lockedHost.innerHTML =
+        '<div class="screen plain">' +
+          UI.emptyState(window.Icons.shield(30), 'Admin area locked', 'Checking for a saved PIN') +
+        '</div>';
+      // A saved, still-valid PIN goes straight in; anything else lands on the PIN
+      // screen so there is one consistent place to type the code.
+      ensureAdminUnlocked().then(function (ok) {
+        if (ok) render(target, param, opts);
+        else Router.reset('admin-login');
+      });
+      return;
+    }
     var host = document.getElementById('screen-host');
     if (current && current.unmount) {
       try { current.unmount(); } catch (e) { console.warn(e); }

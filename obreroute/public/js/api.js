@@ -61,5 +61,15 @@
 
     roadRoute: (points) => req('POST', '/api/road-route', { points: points }),
     resetDemo: () => req('POST', '/api/reset', {}),
+
+    // Authenticated ping used to unlock the admin area on entry, so a locked
+    // deployment asks for the key before showing any admin screen. On a 401 the
+    // shared req() wrapper prompts for the key and retries once automatically.
+    verifyAdminKey: () => req('GET', '/api/admin/verify'),
+
+    // Plain check of a typed PIN against the backend, with no stored-key retry or
+    // modal, so the PIN screen can validate what the reader just entered.
+    checkAdminKey: (key) =>
+      fetch('/api/admin/verify', { method: 'GET', headers: { 'x-admin-key': key || '' } }).then((r) => r.ok),
   };
 })();

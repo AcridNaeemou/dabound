@@ -60,7 +60,7 @@
   {
    "name": "Nearby rows show ETA",
    "pass": true,
-   "extra": "e.g. \"ETA: 2 mins.\""
+   "extra": "e.g. \"ETA: 1 min.\""
   },
   {
    "name": "ETA is humanised (no seconds)",
@@ -80,27 +80,27 @@
   {
    "name": "Nearby jeep list is populated",
    "pass": true,
-   "extra": "3 rows"
+   "extra": "5 rows"
   },
   {
    "name": "Nearby rows show ETA",
    "pass": true,
-   "extra": "e.g. \"ETA: 2 mins.\""
+   "extra": "e.g. \"ETA: 1 min.\""
   },
   {
    "name": "Tracking shows distance/landmark context",
    "pass": true,
-   "extra": "\"Jeepney 01 · Traditional · Near USeP Obrero\""
+   "extra": "\"Jeepney 01 · Traditional · Near Victoria Plaza\""
   },
   {
    "name": "“Near [landmark]” is displayed",
    "pass": true,
-   "extra": "\"Jeepney 01 · Traditional · Near USeP Obrero\""
+   "extra": "\"Jeepney 01 · Traditional · Near Victoria Plaza\""
   },
   {
    "name": "Tracking card shows ETA",
    "pass": true,
-   "extra": "\"2 mins.\""
+   "extra": "\"1 min.\""
   },
   {
    "name": "Tracking card shows distance",
@@ -120,7 +120,7 @@
   {
    "name": "Jeepney marker moves without refresh",
    "pass": true,
-   "extra": "287,351 → 283,354"
+   "extra": "176,306 → 172,308"
   },
   {
    "name": "Routes tab lists routes",
@@ -130,7 +130,7 @@
   {
    "name": "Live updates keep the list scroll position",
    "pass": true,
-   "extra": "list fits the viewport"
+   "extra": "157px held"
   },
   {
    "name": "Route detail shows stops",
@@ -180,7 +180,7 @@
   {
    "name": "Route list renders every route",
    "pass": true,
-   "extra": "6 routes"
+   "extra": "8 routes"
   },
   {
    "name": "Route list has the navy search band",
@@ -195,7 +195,7 @@
   {
    "name": "Admin lists keep their scroll position too",
    "pass": true,
-   "extra": "list fits the viewport"
+   "extra": "144px held"
   },
   {
    "name": "Route detail lists stops and jeepneys",
@@ -400,7 +400,7 @@
   {
    "name": "“Last updated” age is shown",
    "pass": true,
-   "extra": "Last updated 33 sec ago"
+   "extra": "Last updated 34 sec ago"
   },
   {
    "name": "Status pill switches to Connection lost",

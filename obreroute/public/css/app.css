@@ -238,6 +238,37 @@ img { max-width: 100%; }
   width: var(--tap); height: var(--tap); flex: none; margin-right: -8px;
 }
 .appbar.searchable .search-pin { display: inline-flex; align-items: center; flex: none; }
+/* The passenger search lives on its own ribbon across the top of the screen —
+   a single calm band, no appbar chrome, no bright arrow competing with results. */
+.search-ribbon {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 12px; flex: 0 0 auto;
+  background: var(--navy);
+}
+.ribbon-exit {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; flex: none; border-radius: 11px;
+  color: rgba(255, 255, 255, .72);
+}
+.ribbon-exit:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+.ribbon-icon { display: inline-flex; flex: none; color: rgba(255, 255, 255, .6); margin-left: 2px; }
+.ribbon-input {
+  flex: 1; min-width: 0; height: 40px; border: 0; outline: 0;
+  background: rgba(255, 255, 255, .13); color: #fff;
+  border-radius: var(--pill); padding: 0 16px;
+  font-family: inherit; font-size: var(--f-card); font-weight: 600;
+  -webkit-appearance: none; appearance: none;
+}
+.ribbon-input::placeholder { color: rgba(255, 255, 255, .62); font-weight: 500; }
+.ribbon-input::-webkit-search-cancel-button, .ribbon-input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+.ribbon-input:focus { background: rgba(255, 255, 255, .2); box-shadow: 0 0 0 3px rgba(255, 255, 255, .14); }
+.ribbon-clear, .ribbon-info {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex: none; border-radius: 10px;
+  color: rgba(255, 255, 255, .8);
+}
+.ribbon-clear:hover, .ribbon-info:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.ribbon-info.on { background: rgba(255, 255, 255, .18); color: #fff; }
 .search-drop {
   position: absolute; top: 100%; left: 14px; right: 14px; z-index: 940;
   max-height: 52vh; overflow-y: auto;
@@ -490,6 +521,9 @@ img { max-width: 100%; }
 @keyframes ring { 0% { transform: scale(.85); opacity: .9; } 100% { transform: scale(1.55); opacity: 0; } }
 .mk-user { width: 20px; height: 20px; border-radius: 6px 6px 6px 0; transform: rotate(-45deg); background: var(--yellow); border: 3px solid var(--white); box-shadow: 0 2px 6px rgba(0,0,0,.3); position: relative; }
 .mk-stop { width: 16px; height: 16px; border-radius: var(--pill); background: var(--white); border: 3.5px solid var(--navy); box-shadow: var(--shadow-1); }
+/* Draggable vertex handle on the drawn line (route editor "Edit Line"). */
+.mk-vertex { width: 14px; height: 14px; border-radius: 4px; background: #fff; border: 3px solid #e11d48; box-shadow: var(--shadow-1); cursor: grab; }
+.mk-vertex:active { cursor: grabbing; }
 .mk-landmark { width: 20px; height: 20px; border-radius: var(--pill); background: var(--yellow); border: 3px solid var(--white); box-shadow: var(--shadow-1); }
 .mk-start, .mk-end { width: 26px; height: 26px; border-radius: var(--pill); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; border: 2.5px solid var(--white); box-shadow: var(--shadow-1); }
 .mk-start { background: var(--navy); color: var(--yellow); }
