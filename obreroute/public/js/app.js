@@ -27,6 +27,8 @@
     'admin-devices': { make: window.Admin.deviceList },
     'admin-device-detail': { make: window.Admin.deviceDetail, param: 'deviceId' },
     'admin-device-editor': { make: window.Admin.deviceEditor, param: 'deviceId' },
+    'admin-places': { make: window.Admin.placeList },
+    'admin-place-editor': { make: window.Admin.placeEditor, param: 'placeId' },
     'admin-live': { make: window.Admin.liveMap },
     driver: { make: window.Admin.driver, param: 'deviceId' },
   };
@@ -126,6 +128,9 @@
     if (nav) {
       var target = nav.dataset.nav;
       if (target === 'back') return Router.back();
+      // "exit" leaves the passenger or admin side and clears the history stack,
+      // so the phone's back gesture cannot wander back into the app.
+      if (target === 'exit') return Router.reset('role');
       var params = {};
       if (nav.dataset.driver) params.deviceId = nav.dataset.driver;
       if (nav.dataset.device) params.deviceId = nav.dataset.device;
@@ -177,16 +182,35 @@
   });
 
   /* ------------------------------------------------------------------- boot */
+  /* A refresh should land the reader back on the launch screen rather than
+   * dropping them mid-journey. A genuine reload is distinguishable from a fresh
+   * navigation, so deep links (/#/driver/dev-01, a shared /#/tracking/… URL) keep
+   * working — only F5 / pull-to-refresh resets. */
+  function isReload() {
+    try {
+      var entries = performance.getEntriesByType && performance.getEntriesByType('navigation');
+      var nav = entries && entries[0];
+      if (nav && nav.type) return nav.type === 'reload';
+      if (performance.navigation) return performance.navigation.type === 1; // legacy fallback
+    } catch (e) { /* performance API unavailable — treat as a fresh navigation */ }
+    return false;
+  }
+
+  function startAtLaunch() {
+    // drop the stale hash so the address bar matches what is on screen
+    try { history.replaceState({ obr: 0 }, '', location.pathname + location.search); } catch (e) { /* file:// */ }
+    depth = 0;
+    render('splash', null, {});
+    setTimeout(function () {
+      if (Router.current() === 'splash') Router.reset('role');
+    }, 1900);
+  }
+
   function boot() {
-    var parsed = parseHash();
-    if (parsed) {
-      render(parsed.name, parsed.param, {});
-    } else {
-      render('splash', null, {});
-      setTimeout(function () {
-        if (Router.current() === 'splash') Router.reset('role');
-      }, 1900);
-    }
+    // A reload always starts over; any other load honours a deep link if present.
+    var parsed = isReload() ? null : parseHash();
+    if (parsed) render(parsed.name, parsed.param, {});
+    else startAtLaunch();
     Store.boot();
   }
 

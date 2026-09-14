@@ -88,13 +88,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.locator('#p-search').click();
   await sleep(500);
   await shot('destination-search');
-  const allDests = await page.locator('#p-drop [data-dest]').count();
-  ok('Focusing the top box lists every destination', allDests >= 3, allDests + ' destinations');
+  const idleRows = await page.locator('#p-drop [data-dest]').count();
+  const idleHint = await page.locator('#p-drop .drop-idle').count();
+  ok('Focusing the top box prompts instead of dumping every place',
+    idleRows === 0 && idleHint === 1, idleRows + ' rows · hint=' + idleHint);
   await page.fill('#p-search', 'victoria');
   await sleep(600);
   await shot('destination-results');
   const destRows = await page.locator('#p-drop [data-dest]').count();
-  ok('Results are tied to what is typed', destRows >= 1 && destRows < allDests, destRows + ' results for "victoria"');
+  const titles = await page.locator('#p-drop [data-dest] .lr-title').allTextContents();
+  ok('Results are tied to what is typed',
+    destRows >= 1 && titles.every((t) => /victoria/i.test(t)), destRows + ' result(s) for "victoria"');
   await page.locator('#p-drop [data-dest]').first().click();
   await sleep(1800);
   await shot('map-with-destination');
@@ -182,10 +186,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.locator('[data-act="continue"]').click();
   await sleep(1000);
   await shot('admin-profile');
-  ok('Settings holds exactly two buttons', (await page.locator('.menu-row').count()) === 2,
+  ok('Settings holds the three admin areas', (await page.locator('.menu-row').count()) === 3,
     (await page.locator('.menu-row .mr-label').allTextContents()).join(' / '));
-  ok('Settings are Route List + Jeepney Info',
-    (await page.locator('.menu-row .mr-label').allTextContents()).join('|') === 'Route List|Jeepney Info');
+  ok('Settings are Route List + Jeepney Info + Places',
+    (await page.locator('.menu-row .mr-label').allTextContents()).join('|') === 'Route List|Jeepney Info|Places');
   ok('Admin stats render', (await page.locator('.stat').count()) === 3);
 
   console.log('\n── admin: route list + detail (deck p-10 / p-11) ──');

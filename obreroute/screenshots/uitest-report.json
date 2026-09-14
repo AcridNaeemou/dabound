@@ -38,14 +38,14 @@
    "extra": ""
   },
   {
-   "name": "Focusing the top box lists every destination",
+   "name": "Focusing the top box prompts instead of dumping every place",
    "pass": true,
-   "extra": "16 destinations"
+   "extra": "0 rows · hint=1"
   },
   {
    "name": "Results are tied to what is typed",
    "pass": true,
-   "extra": "1 results for \"victoria\""
+   "extra": "1 result(s) for \"victoria\""
   },
   {
    "name": "The chosen destination fills the search box",
@@ -80,7 +80,7 @@
   {
    "name": "Nearby jeep list is populated",
    "pass": true,
-   "extra": "4 rows"
+   "extra": "3 rows"
   },
   {
    "name": "Nearby rows show ETA",
@@ -120,7 +120,7 @@
   {
    "name": "Jeepney marker moves without refresh",
    "pass": true,
-   "extra": "284,377 → 281,379"
+   "extra": "287,351 → 283,354"
   },
   {
    "name": "Routes tab lists routes",
@@ -130,7 +130,7 @@
   {
    "name": "Live updates keep the list scroll position",
    "pass": true,
-   "extra": "133px held"
+   "extra": "list fits the viewport"
   },
   {
    "name": "Route detail shows stops",
@@ -163,12 +163,12 @@
    "extra": ""
   },
   {
-   "name": "Settings holds exactly two buttons",
+   "name": "Settings holds the three admin areas",
    "pass": true,
-   "extra": "Route List / Jeepney Info"
+   "extra": "Route List / Jeepney Info / Places"
   },
   {
-   "name": "Settings are Route List + Jeepney Info",
+   "name": "Settings are Route List + Jeepney Info + Places",
    "pass": true,
    "extra": ""
   },

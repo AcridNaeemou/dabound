@@ -288,9 +288,27 @@ async function deviceState() {
     await page.waitForTimeout(300);
     ok('The map asks where the passenger wants to go',
       /Tap the map to choose where you want to go/.test(await page.locator('#p-pick-hint').innerText()));
+
+    // Dismiss the "Are you here?" card first if a location fix is showing, so it
+    // cannot sit under the tap.
+    if (await page.locator('#p-user-confirm [data-act="confirm-here"]').isVisible().catch(() => false)) {
+      await page.click('#p-user-confirm [data-act="confirm-here"]');
+      await page.waitForTimeout(400);
+    }
+
     const mapBox = await page.locator('#p-map').boundingBox();
-    // tap the middle of the map, which is on the corridor for this fixture
-    await page.mouse.click(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+    // With no destination chosen the routes are hidden (spec: don't overload the
+    // map), so the centre of the map is not guaranteed to be on a route any more.
+    // Tap just beside the live jeepney instead: it is sitting on its own path, so
+    // the pin lands inside the 100 m "this jeepney will actually get you there"
+    // filter. The offset has to clear the 22 px marker but stay well under 100 m
+    // on the ground — at this zoom the route spans ~1.2 km over ~276 px, so keep
+    // it to ~14 px (≈60 m) rather than something that looks safe in pixels.
+    const jeepBox = await page.locator('#p-map .mk-jeep-dot').first().boundingBox().catch(() => null);
+    const off = jeepBox ? jeepBox.width / 2 + 4 : 0;
+    const tapX = jeepBox ? jeepBox.x + jeepBox.width / 2 + off : mapBox.x + mapBox.width / 2;
+    const tapY = jeepBox ? jeepBox.y + jeepBox.height / 2 : mapBox.y + mapBox.height / 2;
+    await page.mouse.click(tapX, tapY);
     await page.waitForTimeout(600);
     ok('Tapping the map drops a pin and asks to confirm',
       (await page.locator('#p-pick-confirm').isVisible()) && /Use this spot\?/.test(await page.locator('#p-pick-hint').innerText()));
@@ -300,16 +318,53 @@ async function deviceState() {
     const picked = await page.evaluate(() => {
       const d = window.Store.session.destination;
       if (!d) return null;
+      const routes = window.Store.state.routes;
+      const r = routes[0];
+      let offM = null;
+      if (r && r.path && r.path.length > 1) {
+        offM = Math.round(window.Geo.project(window.Geo.prepare(r.path),
+          { lat: d.latitude, lng: d.longitude }, null, null).offM);
+      }
       return {
         custom: !!d.custom,
         label: d.name,
+        offM,
         near: window.Store.devices({ destination: d, servingDestination: true }).map((x) => x.id),
         box: document.getElementById('p-search').value,
       };
     });
     ok('The pin becomes the passenger destination', !!picked && picked.custom === true, JSON.stringify(picked && picked.label));
-    ok('The pin is used like any other destination (jeepneys passing it are listed)',
-      !!picked && picked.near.indexOf(DEV) >= 0, picked ? picked.near.join(', ') || 'none' : 'none');
+
+    // "Used like any other destination" means the pin is filtered by real route
+    // geometry: a jeepney is listed only if its route passes within 100 m of it.
+    // Assert that against geometry rather than against wherever this particular
+    // tap happened to land, so the check does not depend on the map's zoom level
+    // (at the zoom used here one pixel is ~11 m, so a tap that clears the 22 px
+    // jeepney marker is already ~170 m off the route).
+    const rule = await page.evaluate((path) => {
+      const G = window.Geo;
+      const prep = G.prepare(path);
+      const probe = (lat, lng) => ({
+        offM: Math.round(G.project(prep, { lat: lat, lng: lng }, null, null).offM),
+        listed: window.Store.devices({
+          destination: { custom: true, name: 'probe', latitude: lat, longitude: lng },
+          servingDestination: true,
+        }).map((d) => d.id),
+      });
+      return {
+        onPath: probe(path[2].lat, path[2].lng),
+        farAway: probe(path[2].lat + 0.05, path[2].lng + 0.05),
+      };
+    }, ROUTE.path);
+    ok('A pin dropped on a route lists the jeepneys that pass it (100 m filter)',
+      rule.onPath.offM <= 100 && rule.onPath.listed.indexOf(DEV) >= 0,
+      `${rule.onPath.offM} m off route → ${rule.onPath.listed.join(', ') || 'none'}`);
+    ok('A pin far from every route lists no jeepneys',
+      rule.farAway.offM > 100 && rule.farAway.listed.length === 0,
+      `${rule.farAway.offM} m off route → ${rule.farAway.listed.join(', ') || 'none'}`);
+    ok('The pin tapped on the map obeys the same 100 m rule',
+      !!picked && ((picked.offM <= 100) === (picked.near.indexOf(DEV) >= 0)),
+      picked ? `${picked.offM} m off route → ${picked.near.join(', ') || 'none'}` : 'no pin');
     ok('The box shows where the trip is going', !!picked && /Pin on the map/.test(picked.box), picked ? picked.box : '');
     ok('The map draws the destination pin', (await page.locator('#p-map .mk-dest').count()) >= 1);
 

@@ -181,8 +181,7 @@
     if (targetS == null) return null;
     var rem = targetS - s;
     if (rem < 0) rem = isLoop ? prep.totalM + rem : 0;
-    if (!isLoop && rem < 0) rem = 0;
-    return rem;
+    return Math.max(0, rem);
   }
 
   // --- presentation helpers (spec §27, §64) ----------------------------------
@@ -232,7 +231,6 @@
     bearing: bearing,
     prepare: prepare,
     pointAt: pointAt,
-    haversine: haversine,
     headingAt: headingAt,
     project: project,
     stopMetrics: stopMetrics,

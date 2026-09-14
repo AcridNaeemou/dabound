@@ -179,21 +179,23 @@
         if (opts.activeOnly && !d.active) return false;
         if (opts.onlineOnly && d.status !== 'online') return false;
         if (opts.servingDestination && opts.destination) {
-          var ids = opts.destination.routeIds || [];
-          var serving = ids.indexOf(d.routeId) >= 0;
-          if (!serving && d.routeId) {
-            // a pin dropped on the map (or a route drawn after the place list was
-            // made) is matched by how close the route really passes to that spot
-            var r = state.routes.find(function (x) { return x.id === d.routeId; });
-            if (r && r.path && r.path.length > 1) {
-              var prep = prepCache[r.id];
-              if (!prep || prep.len !== r.path.length) {
-                prep = window.Geo.prepare(r.path);
-                prep.len = r.path.length;
-                prepCache[r.id] = prep;
-              }
-              serving = window.Geo.project(prep, { lat: opts.destination.latitude, lng: opts.destination.longitude }, null, null).offM < 400;
+          var dest = opts.destination;
+          var dp = { lat: dest.latitude, lng: dest.longitude };
+          var r = d.routeId ? state.routes.find(function (x) { return x.id === d.routeId; }) : null;
+          var serving;
+          if (r && r.path && r.path.length > 1) {
+            // Geometric truth: does this route actually pass the destination?
+            var prep = prepCache[r.id];
+            if (!prep || prep.len !== r.path.length) {
+              prep = window.Geo.prepare(r.path);
+              prep.len = r.path.length;
+              prepCache[r.id] = prep;
             }
+            serving = window.Geo.project(prep, dp, null, null).offM <= (opts.nearM || 100);
+          } else {
+            // No geometry to test (a route with a single point) — fall back to the
+            // curated list an admin attached to the destination.
+            serving = (dest.routeIds || []).indexOf(d.routeId) >= 0;
           }
           if (!serving) return false;
         }

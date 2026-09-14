@@ -20,6 +20,30 @@ const path = require('path');
 const crypto = require('crypto');
 const Geo = require('./public/js/geo.js');
 
+/* Minimal .env loader — the app has no dependencies, so it does not pull in
+ * dotenv. Existing environment variables always win, which keeps host-level
+ * config (Render, Fly, Docker) authoritative over a local file. */
+(function loadDotEnv() {
+  const envPath = path.join(__dirname, '.env');
+  let text;
+  try {
+    text = fs.readFileSync(envPath, 'utf8');
+  } catch (e) {
+    return; // no .env is normal — everything can come from the real environment
+  }
+  text.split(/\r?\n/).forEach((line) => {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!m) return;
+    const key = m[1];
+    if (process.env[key] != null && process.env[key] !== '') return;
+    let val = m[2].trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    process.env[key] = val;
+  });
+})();
+
 const PORT = +(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const ROOT = __dirname;
@@ -61,6 +85,33 @@ const CONFIG = {
   simulatorTickMs: 1000,
   etaRefreshMs: 20000,
 };
+
+// --- numeric input hygiene ---------------------------------------------------
+// `+null`, `+''`, `+false` and `+[]` all coerce to 0, and 0 is a perfectly valid
+// latitude/longitude. Reading a coordinate that way let a blank GPS frame place a
+// jeepney at "Null Island" (0,0) in the Gulf of Guinea — ~13,000 km off its route —
+// because the implausible-jump guard only runs when a previous fix exists.
+// num() returns NaN for anything that is not a real number or a numeric string.
+function num(v) {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '') return +v;
+  return NaN;
+}
+
+/** True when lat/lng are finite numbers inside the real-world coordinate range. */
+function coordsOk(lat, lng) {
+  return (
+    isFinite(lat) && isFinite(lng) &&
+    lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+  );
+}
+
+/** Heading in [0,360). Anything else would spin the map marker to a random angle. */
+function normHeading(v) {
+  const h = num(v);
+  if (!isFinite(h)) return null;
+  return ((h % 360) + 360) % 360;
+}
 
 // ---------------------------------------------------------------------------
 // Store
@@ -174,6 +225,7 @@ function publicDevice(dev, now) {
     type: dev.type,
     driver: dev.driver || '',
     color: dev.color || null,
+    color2: dev.color2 || null,
     active: dev.active,
     status: status,
     online: status === 'online',
@@ -189,18 +241,17 @@ function publicDevice(dev, now) {
     ageMs: dev.lastUpdated ? now - dev.lastUpdated : null,
     speedWindowSec: dev.speedWindowSec || 0,
     speedReady: (dev.speedWindowSec || 0) >= 8,
-    offRouteM: derived && derived.offRouteM != null ? Math.round(derived.offRouteM) : null,
-    offRoute: !!(derived && derived.offRouteM != null && derived.offRouteM > CONFIG.offRouteToleranceM),
-    s: derived ? derived.s : null,
-    routeTotalM: derived ? derived.routeTotalM : route ? prepFor(route).prep.totalM : null,
-    progressPct: derived && derived.routeTotalM ? Math.min(100, (derived.s / derived.routeTotalM) * 100) : null,
-    offRouteM: derived ? derived.offRouteM : null,
+    offRouteM: derived && derived.offRouteM != null && isFinite(derived.offRouteM) ? Math.round(derived.offRouteM) : null,
+    offRoute: !!(derived && isFinite(derived.offRouteM) && derived.offRouteM > CONFIG.offRouteToleranceM),
+    s: derived && isFinite(derived.s) ? Math.round(derived.s) : null,
+    routeTotalM: derived ? Math.round(derived.routeTotalM) : route ? Math.round(prepFor(route).prep.totalM) : null,
+    progressPct: derived && derived.routeTotalM ? Math.round(Math.min(100, (derived.s / derived.routeTotalM) * 100) * 10) / 10 : null,
     landmark: heldLandmark(dev, derived),
     nextStop: derived ? derived.nextStop : null,
-    distanceToNextStopM: derived ? derived.remainingToNextStopM : null,
-    distanceToEndM: derived ? derived.remainingToEndM : null,
-    etaSecToNextStop: etaSecToNext,
-    etaSecToEnd: etaSecToEnd,
+    distanceToNextStopM: derived && isFinite(derived.remainingToNextStopM) ? Math.round(derived.remainingToNextStopM) : null,
+    distanceToEndM: derived && isFinite(derived.remainingToEndM) ? Math.round(derived.remainingToEndM) : null,
+    etaSecToNextStop: etaSecToNext != null && isFinite(etaSecToNext) ? Math.round(etaSecToNext) : null,
+    etaSecToEnd: etaSecToEnd != null && isFinite(etaSecToEnd) ? Math.round(etaSecToEnd) : null,
     arrived: !!(derived && derived.remainingToEndM != null && derived.remainingToEndM < 30 && status === 'online'),
   };
 }
@@ -230,7 +281,7 @@ function snapshot(now) {
 function deviceProjection(d) {
   return {
     id: d.id, name: d.name, routeId: d.routeId, type: d.type, active: d.active,
-    phone: d.phone || '', driver: d.driver || '', color: d.color || null,
+    phone: d.phone || '', driver: d.driver || '', color: d.color || null, color2: d.color2 || null,
     simulated: !!d.simulated, tracking: !!d.tracking,
     lastFix: d.lastFix || null, smoothed: d.smoothed || null, s: d.s || 0,
     speedKmh: d.speedKmh || 0, heading: d.heading || 0, lastUpdated: d.lastUpdated || null,
@@ -432,6 +483,7 @@ function mountState(routesCfg, destinationsCfg, devicesCfg, opts) {
       phone: cfg.phone || '',
       driver: cfg.driver || '',
       color: cfg.color || null,
+      color2: cfg.color2 || null,
       tracking: false,
       simulated: false,
       speedKmh: cfg.speedKmh || 0,
@@ -473,11 +525,13 @@ function ingestFix(deviceId, fix, opts) {
   const dev = state.devices[deviceId];
   if (!dev) return { error: 'unknown device' };
   const now = Date.now();
-  const raw = { lat: +fix.lat, lng: +fix.lng };
+  const raw = { lat: num(fix.lat), lng: num(fix.lng) };
   if (!isFinite(raw.lat) || !isFinite(raw.lng)) return { error: 'invalid coordinates' };
-  if (raw.lat < -90 || raw.lat > 90 || raw.lng < -180 || raw.lng > 180) {
-    return { error: 'coordinates out of range' };
-  }
+  if (!coordsOk(raw.lat, raw.lng)) return { error: 'coordinates out of range' };
+  // GPS chipsets commonly report 0,0 when they have no fix. It is never a real
+  // jeepney position, and without this check a first (unverifiable) reading would
+  // drop the vehicle into the ocean.
+  if (raw.lat === 0 && raw.lng === 0) return { error: 'coordinates out of range' };
   // A phone also reports when it took the fix. The server clock stays
   // authoritative for every window/timeout calculation; the device clock is
   // only trusted when it is sane, and is kept for traceability (spec 9, 31).
@@ -490,7 +544,8 @@ function ingestFix(deviceId, fix, opts) {
   const dtSec = dev.lastUpdated ? (now - dev.lastUpdated) / 1000 : null;
 
   // --- reject implausible readings instead of corrupting the track (spec 24, 29)
-  const accuracy = fix.accuracy != null && isFinite(+fix.accuracy) ? +fix.accuracy : null;
+  const accRaw = num(fix.accuracy);
+  const accuracy = isFinite(accRaw) && accRaw >= 0 ? accRaw : null;
   if (prev) {
     const tooFar = jump > Math.max(120, (accuracy || 0) * 6);
     // An interval that is too short (or missing) cannot vouch for a long jump:
@@ -537,12 +592,16 @@ function ingestFix(deviceId, fix, opts) {
     const observed = (travelledM / windowSec) * 3.6;
     dev.speedKmh = dev.speedKmh ? dev.speedKmh + (observed - dev.speedKmh) * 0.5 : observed;
     if (dev.speedKmh < 1.5) dev.speedKmh = 0;
-  } else if (fix.speed != null && isFinite(+fix.speed)) {
-    const kmh = Math.min(+fix.speed, CONFIG.maxPlausibleKmh);
+  } else if (isFinite(num(fix.speed))) {
+    const kmh = Math.max(0, Math.min(num(fix.speed), CONFIG.maxPlausibleKmh));
     dev.speedKmh = kmh > 3 ? kmh : 0;
   }
-  if (fix.heading != null && isFinite(+fix.heading)) dev.heading = +fix.heading;
-  if (fix.accuracy != null) dev.accuracy = +fix.accuracy;
+  const hdg = normHeading(fix.heading);
+  if (hdg != null) dev.heading = hdg;
+  // An accuracy that is negative, absurd or unparseable is not a measurement: keep
+  // the last good value rather than storing nonsense the arrival banner trusts
+  // (its "genuine GPS" gate is `accuracy <= 120`, which -9999 happily satisfies).
+  if (accuracy != null && accuracy <= 10000) dev.accuracy = accuracy;
   dev.lastFix = raw;
   dev.lastUpdated = now;
   dev.tracking = true;
@@ -753,10 +812,21 @@ const MIME = {
 };
 
 function serveStatic(req, res, urlPath) {
-  let rel = decodeURIComponent(urlPath.split('?')[0]);
+  let rel;
+  try {
+    rel = decodeURIComponent(urlPath.split('?')[0]);
+  } catch (e) {
+    // A malformed % escape (e.g. "/%zz") is a bad request, not a server fault —
+    // it used to escape as a 500 "URI malformed" and a line in the error log.
+    return json(res, 400, { error: 'malformed URL' });
+  }
   if (rel === '/' || rel === '') rel = '/index.html';
   const filePath = path.join(PUBLIC_DIR, path.normalize(rel).replace(/^([/\\])+/, ''));
-  if (!filePath.startsWith(PUBLIC_DIR)) return json(res, 403, { error: 'forbidden' });
+  // Compare against PUBLIC_DIR + separator: a bare prefix test would also accept a
+  // sibling directory whose name merely starts with "public" (e.g. "public_backup").
+  if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
+    return json(res, 403, { error: 'forbidden' });
+  }
   fs.stat(filePath, (err, stat) => {
     if (err || !stat.isFile()) {
       // SPA fallback
@@ -784,33 +854,58 @@ function slug(prefix) {
 
 function validateRoute(body) {
   const errors = [];
+  if (!body || typeof body !== 'object') { errors.push('A route object is required.'); return errors; }
   if (!body.name || !String(body.name).trim()) errors.push('Route name is required.');
   const stops = Array.isArray(body.stops) ? body.stops : [];
   if (!stops.length) errors.push('Add at least one stop or landmark.');
   stops.forEach((s, i) => {
-    if (!isFinite(+s.latitude) || !isFinite(+s.longitude)) errors.push(`Stop ${i + 1} has no valid coordinates.`);
+    // A null/short entry used to throw a TypeError inside the validator, which
+    // surfaced as an HTTP 500 leaking internal text instead of a 422.
+    if (!s || typeof s !== 'object') { errors.push(`Stop ${i + 1} is not a valid stop.`); return; }
+    const lat = num(s.latitude), lng = num(s.longitude);
+    if (!isFinite(lat) || !isFinite(lng)) errors.push(`Stop ${i + 1} has no valid coordinates.`);
+    else if (!coordsOk(lat, lng)) errors.push(`Stop ${i + 1} is outside the map (latitude -90…90, longitude -180…180).`);
     if (!s.name || !String(s.name).trim()) errors.push(`Stop ${i + 1} needs a name.`);
   });
   const path = Array.isArray(body.path) ? body.path : [];
   if (!path.length) errors.push('The route needs at least one coordinate.');
+  path.forEach((p, i) => {
+    if (!p || typeof p !== 'object') { errors.push(`Path point ${i + 1} is not a coordinate.`); return; }
+    const lat = num(p.lat), lng = num(p.lng);
+    if (!coordsOk(lat, lng)) errors.push(`Path point ${i + 1} has no valid coordinates.`);
+  });
+  // Optional, but when the caller does send them they must be usable: an explicit
+  // {lat:null,lng:null} used to be stored verbatim and pushed NaN into the maths.
+  [['startPoint', body.startPoint], ['endPoint', body.endPoint]].forEach(([label, pt]) => {
+    if (pt == null) return;
+    if (typeof pt !== 'object') { errors.push(`${label} is not a coordinate.`); return; }
+    if (!coordsOk(num(pt.lat), num(pt.lng))) errors.push(`${label} has no valid coordinates.`);
+  });
   return errors;
 }
 
 function normaliseRoute(body, existing) {
-  const stops = (body.stops || []).map((s, i) => ({
+  const stops = (Array.isArray(body.stops) ? body.stops : [])
+    .filter((s) => s && typeof s === 'object')
+    .map((s, i) => ({
     id: s.id || slug('stop'),
     routeId: existing ? existing.id : body.id,
-    name: String(s.name).trim(),
-    latitude: +s.latitude,
-    longitude: +s.longitude,
+    name: String(s.name == null ? '' : s.name).trim(),
+    latitude: num(s.latitude),
+    longitude: num(s.longitude),
     order: i + 1,
     type: ['start', 'stop', 'landmark', 'endpoint'].includes(s.type) ? s.type : i === 0 ? 'start' : 'stop',
   }));
-  const path = (body.path || []).map((p) => ({ lat: +p.lat, lng: +p.lng }));
-  const corridor = (body.corridor || []).filter((q) => q && isFinite(+q.lat) && isFinite(+q.lng)).map((q) => ({ lat: +q.lat, lng: +q.lng }));
-  const startPoint = body.startPoint || (stops.length ? { lat: stops[0].latitude, lng: stops[0].longitude, name: stops[0].name } : null);
+  // filter, not just map: `+null` is 0, so an unfiltered map turns a blank point
+  // into a real coordinate at (0,0) — the same trap the GPS ingest had.
+  const validPoint = (p) => p && typeof p === 'object' && coordsOk(num(p.lat), num(p.lng));
+  const path = (Array.isArray(body.path) ? body.path : []).filter(validPoint).map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
+  const corridor = (Array.isArray(body.corridor) ? body.corridor : []).filter(validPoint).map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
+  const givenStart = body.startPoint && typeof body.startPoint === 'object' && coordsOk(num(body.startPoint.lat), num(body.startPoint.lng)) ? body.startPoint : null;
+  const givenEnd = body.endPoint && typeof body.endPoint === 'object' && coordsOk(num(body.endPoint.lat), num(body.endPoint.lng)) ? body.endPoint : null;
+  const startPoint = givenStart || (stops.length ? { lat: stops[0].latitude, lng: stops[0].longitude, name: stops[0].name } : null);
   const last = stops[stops.length - 1];
-  const endPoint = body.endPoint || (last ? { lat: last.latitude, lng: last.longitude, name: last.name } : null);
+  const endPoint = givenEnd || (last ? { lat: last.latitude, lng: last.longitude, name: last.name } : null);
   let distanceM = 0;
   for (let i = 1; i < path.length; i++) distanceM += Geo.haversine(path[i - 1], path[i]);
   const isLoop = !!(startPoint && endPoint && Math.abs(startPoint.lat - endPoint.lat) < 1e-5 && Math.abs(startPoint.lng - endPoint.lng) < 1e-5);
@@ -818,6 +913,8 @@ function normaliseRoute(body, existing) {
     id: existing ? existing.id : body.id || slug('route'),
     name: String(body.name).trim(),
     color: body.color || (existing && existing.color) || '#173B5C',
+    // second colour of a two-tone route; null means a single solid colour
+    color2: body.color2 || (existing && existing.color2) || null,
     active: body.active !== false,
     startPoint: startPoint,
     endPoint: endPoint,
@@ -842,6 +939,7 @@ function normaliseDevice(body, existing) {
     type: body.type || 'Traditional',
     driver: body.driver != null ? String(body.driver).trim() : (existing && existing.driver) || '',
     color: body.color || (existing && existing.color) || null,
+    color2: body.color2 || (existing && existing.color2) || null,
     active: body.active !== false,
     phone: body.phone || '',
   };
@@ -854,7 +952,14 @@ async function handleApi(req, res, urlPath, query) {
 
   // A public deployment can be locked with ADMIN_KEY: reads (state, events, list
   // endpoints) stay public so passengers need nothing, writes need the header.
-  if (ADMIN_KEY && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+  //
+  // The driver's phone is the exception. It posts GPS from /#/driver/<id> and has
+  // no way to hold the admin key, so telemetry ingest and the tracking toggle must
+  // stay open or locking the deployment silently stops every jeepney reporting.
+  const isDriverTelemetry =
+    route[0] === 'devices' && route.length >= 3 && (route[2] === 'location' || route[2] === 'tracking');
+
+  if (ADMIN_KEY && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && !isDriverTelemetry) {
     const supplied = req.headers['x-admin-key'] || query.get('key') || '';
     if (supplied !== ADMIN_KEY) {
       return json(res, 401, { error: 'This DaBound deployment is locked. Enter the admin key.', adminKeyRequired: true });
@@ -1144,12 +1249,17 @@ async function handleApi(req, res, urlPath, query) {
     if (method === 'POST' && route.length === 1) {
       const body = await readBody(req);
       if (!String(body.name || '').trim()) return json(res, 422, { errors: ['Destination name is required.'] });
+      const lat = +body.latitude;
+      const lng = +body.longitude;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return json(res, 422, { errors: ['A valid latitude and longitude are required.'] });
+      }
       const dest = {
         id: body.id || slug('dest'),
         name: String(body.name).trim(),
         address: body.address || 'Davao City',
-        latitude: +body.latitude,
-        longitude: +body.longitude,
+        latitude: lat,
+        longitude: lng,
         routeIds: Array.isArray(body.routeIds) ? body.routeIds : [],
       };
       state.destinations.push(dest);
@@ -1162,7 +1272,11 @@ async function handleApi(req, res, urlPath, query) {
     if (idx < 0) return json(res, 404, { error: 'Destination not found.' });
     if (method === 'PUT') {
       const body = await readBody(req);
-      state.destinations[idx] = { ...state.destinations[idx], ...body, id: id };
+      const next = { ...state.destinations[idx], ...body, id: id };
+      // Never let a bad coordinate clobber a good one.
+      if (body.latitude != null && !Number.isFinite(+body.latitude)) next.latitude = state.destinations[idx].latitude;
+      if (body.longitude != null && !Number.isFinite(+body.longitude)) next.longitude = state.destinations[idx].longitude;
+      state.destinations[idx] = next;
       persist();
       broadcast('destinations', { destinations: state.destinations });
       return json(res, 200, { destination: state.destinations[idx] });
@@ -1210,7 +1324,9 @@ const server = http.createServer(async (req, res) => {
     }
   } catch (err) {
     console.error('request failed:', err);
-    if (!res.headersSent) json(res, 500, { error: err.message || 'Server error' });
+    // The detail is already in the server log; sending err.message to the client
+    // leaked internals (e.g. "Cannot read properties of null (reading 'latitude')").
+    if (!res.headersSent) json(res, 500, { error: 'Server error' });
     else res.end();
   }
 });

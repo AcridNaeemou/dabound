@@ -73,6 +73,8 @@
     var locNote = null;  // { text, retry } shown under the map when locate fails
     var picking = false; // choosing a destination by tapping the map
     var pin = null;      // the spot the reader tapped, before they confirm it
+    // Has the reader agreed that the blue dot really is where they are standing?
+    var userConfirmed = !!(Store.session.userLocation && Store.session.userLocation.confirmed);
 
     function destination() { return Store.session.destination; }
     function devicesForList() {
@@ -105,6 +107,17 @@
     }
 
     function dropHtml() {
+      // Suggestions appear only once the reader starts typing. Focusing the box
+      // must not dump the whole place list on them — that reads like a menu, not
+      // a search. An idle prompt tells them what the box does instead.
+      if (!q.trim()) {
+        return (
+          '<div class="drop-idle">' +
+            window.Icons.search(20) +
+            '<span>Start typing a mall, school or landmark</span>' +
+          '</div>'
+        );
+      }
       var list = matches();
       if (!list.length) {
         return UI.emptyState(window.Icons.search(26), 'No destinations found.', 'Try another mall, school or landmark.');
@@ -171,9 +184,10 @@
       el.innerHTML =
         '<div class="search-wrap">' +
           '<header class="appbar searchable">' +
+            '<button class="back-chevron" data-nav="exit" aria-label="Back to the launch screen">' + window.Icons.chevLeft(26) + '</button>' +
             '<span class="appbar-lead brand-lead">' + window.Brand.jeepArt('#173B5C', 30) + '</span>' +
             '<input id="p-search" class="search-field" type="search" autocomplete="off" enterkeyhint="search"' +
-              ' placeholder="Type in your Destination." aria-label="Search your destination"' +
+              ' placeholder="Madayaw!" aria-label="Search your destination"' +
               ' value="' + UI.esc(destination() ? destination().name : '') + '" />' +
             '<button class="clear" data-act="clear-search" aria-label="Clear" hidden>' + window.Icons.x(18) + '</button>' +
             '<span class="search-pin">' + window.Icons.pinFilledYellow(20) + '</span>' +
@@ -195,6 +209,7 @@
             '<button class="bar-action" data-act="use-pin">' + window.Icons.pinFilled(17) + ' Go here</button>' +
             '<button class="bar-action quiet" data-act="cancel-pin">Cancel</button>' +
           '</div>' +
+          '<div class="map-confirm user-confirm" id="p-user-confirm" hidden></div>' +
         '</div>' +
         '<div class="p-under" id="p-under"></div>' +
         bottomNav('map');
@@ -241,14 +256,18 @@
     /* loud = the reader asked for it, so failures are explained on screen */
     function askForLocation(loud) {
       setLocating(true);
+      // An explicit "find me" re-opens the "Are you here?" question; a background
+      // refresh keeps whatever the reader already confirmed so it never nags.
+      if (loud) userConfirmed = false;
       if (loud) { locNote = null; paintUnder(); }
       window.GeoLoc.request()
         .then(function (loc) {
+          if (!userConfirmed) loc.confirmed = false;
           origin = loc;
           Store.session.userLocation = loc;
           locNote = null;
           setLocating(false);
-          if (kit) { kit.setUserLocation(loc, 'You are here'); kit.panTo(loc, 15); }
+          if (kit) { paintUserPin(); kit.panTo(loc, 15); }
           var host = DOM.qs(el, '#p-jeeps');
           if (host) host.innerHTML = rowsHtml(sorted());
           paintUnder();
@@ -262,6 +281,12 @@
         });
     }
 
+    /* Maps behaviour:
+     *   (a) no destination yet -> jeepney dots only, route lines hidden so the map
+     *       stays readable; tapping a dot opens that jeepney and its route
+     *   (b) destination chosen  -> only jeepneys whose route really passes it
+     *       (within 100 m) are kept, and those routes are drawn
+     *   (c) location shared     -> same as (a) plus the reader's own dot           */
     function draw() {
       if (!kit) return;
       var dest = destination();
@@ -269,11 +294,15 @@
       kit.clearRoute();
       if (dest) {
         var seen = {};
+        var first = true;
         list.forEach(function (d) {
           if (!d.routeId || seen[d.routeId]) return;
           seen[d.routeId] = 1;
           var r = Store.routeById(d.routeId);
-          if (r) kit.drawRoute(r, { showStops: false, color: r.color || undefined });
+          if (!r) return;
+          // append after the first, otherwise each drawRoute wipes the previous one
+          kit.drawRoute(r, { showStops: false, color: r.color || undefined, append: !first });
+          first = false;
         });
       }
       kit.keepOnlyDevices(list.map(function (d) { return d.id; }));
@@ -281,7 +310,41 @@
         kit.upsertDevice(d, { onClick: function (id) { window.Router.go('tracking', { deviceId: id }); } });
       });
       if (dest) kit.setDestination({ lat: dest.latitude, lng: dest.longitude }, dest.name);
-      kit.setUserLocation(Store.session.userLocation || origin, 'You are here');
+      else kit.clearDestination();          // a cleared destination must take its pin with it
+      paintUserPin();
+    }
+
+    /* The reader's own dot, with the "Are you here?" chance to correct a sloppy fix. */
+    function paintUserPin() {
+      if (!kit) return;
+      var loc = Store.session.userLocation || origin;
+      if (!loc) { kit.setUserLocation(null); return; }
+      kit.setUserLocation(loc, userConfirmed ? 'You are here' : 'Are you here?', {
+        confirmed: userConfirmed,
+        draggable: !userConfirmed,
+        onMove: function (p) {
+          origin = { lat: p.lat, lng: p.lng, accuracy: (Store.session.userLocation || {}).accuracy || null, adjusted: true };
+          Store.session.userLocation = origin;
+          paintUserConfirm();
+          paintUnder();
+        },
+      });
+      paintUserConfirm();
+    }
+
+    /* Small card over the map: confirm the pin or move it. Disappears once confirmed. */
+    function paintUserConfirm() {
+      var host = DOM.qs(el, '#p-user-confirm');
+      if (!host) return;
+      var loc = Store.session.userLocation || origin;
+      host.hidden = !(!userConfirmed && !!loc && !picking);
+      if (host.hidden) return;
+      host.innerHTML =
+        '<div class="uc-title">' + window.Icons.info(15) + '<span>Are you here?</span></div>' +
+        '<div class="uc-sub">Drag the blue dot if that is not quite right.</div>' +
+        '<div class="uc-actions">' +
+          '<button class="bar-action" data-act="confirm-here">' + window.Icons.check(16) + ' Yes, this is me</button>' +
+        '</div>';
     }
 
     function paintPick() {
@@ -404,6 +467,14 @@
             draw();
             paintUnder();
             UI.toast('Showing jeepneys that pass your pin');
+            return;
+          }
+          if (e.target.closest('[data-act="confirm-here"]')) {
+            userConfirmed = true;
+            if (Store.session.userLocation) Store.session.userLocation.confirmed = true;
+            paintUserPin();
+            paintUnder();
+            UI.toast('Location confirmed');
             return;
           }
           if (e.target.closest('[data-act="locate"]')) {
@@ -607,7 +678,9 @@
         if (flags[dev.id]) delete flags[dev.id];
         return { show: false, justArrived: false, distanceM: d };
       }
-      var goodFix = dev.accuracy == null || dev.accuracy <= 120;   // a wild fix must not fake an arrival
+      // A negative or absurd accuracy is not a measurement, so it must not count as
+      // a good fix — `<= 120` on its own lets -9999 through.
+      var goodFix = dev.accuracy == null || (dev.accuracy >= 0 && dev.accuracy <= 120);
       var close = d <= ARRIVE_M && dev.status === 'online' && goodFix;
       if (!close) return { show: false, justArrived: false, distanceM: d };
       var just = !flags[dev.id];
@@ -816,6 +889,7 @@
   function routesScreen() {
     var el = DOM.el('<div class="screen plain"></div>');
     var q = '';
+    var howto = false;   // the "How to ride" card stays tucked away until asked for
 
     function filtered() {
       var s = q.trim().toLowerCase();
@@ -831,7 +905,7 @@
     function listHtml() {
       var routes = filtered();
       if (!Store.state.routes.length) {
-        return UI.emptyState(window.Icons.routeIcon(28), 'No routes available.', 'An admin can add routes in the admin panel.');
+        return UI.emptyState(window.Icons.routeIcon(28), 'No routes available yet');
       }
       if (!routes.length) {
         return UI.emptyState(window.Icons.search(28), 'No routes match "' + UI.esc(q.trim()) + '".', 'Try another route or stop name.');
@@ -843,17 +917,23 @@
       el.innerHTML =
         '<div class="search-wrap">' +
           '<header class="appbar searchable">' +
-            '<span class="appbar-lead brand-lead">' + window.Brand.jeepArt('#173B5C', 30) + '</span>' +
+            '<button class="back-chevron" data-nav="exit" aria-label="Back to the launch screen">' + window.Icons.chevLeft(26) + '</button>' +
             '<input id="r-search" class="search-field" type="search" autocomplete="off"' +
               ' placeholder="Search a route or a stop" aria-label="Search routes"' +
               ' value="' + UI.esc(q) + '" />' +
             '<button class="clear" data-act="clear-search" aria-label="Clear"' + (q ? '' : ' hidden') + '>' + window.Icons.x(18) + '</button>' +
+            '<button class="icon-btn' + (howto ? ' on' : '') + '" data-act="toggle-howto" aria-label="How to ride"' +
+              ' aria-expanded="' + howto + '" aria-controls="r-howto">' + window.Icons.info(20) + '</button>' +
           '</header>' +
         '</div>' +
         '<div class="scroll" id="r-scroll" style="padding:6px 14px 16px">' +
+          '<div id="r-howto" class="container pad howto-box"' + (howto ? '' : ' hidden') + '>' +
+            UI.tipsCard('How to ride')
+              .replace('Type in your Destination.', 'Tap a route to see its stops and live jeepneys.')
+              .replace('Tap a jeepney on the list to see its details.', 'Search your destination for jeepneys that pass by it.') +
+          '</div>' +
           '<div id="r-list">' + listHtml() + '</div>' +
           '<div style="height:16px"></div>' +
-          '<div class="container pad">' + UI.tipsCard('How to ride').replace('Type in your Destination.', 'Tap a route to see its stops and live jeepneys.').replace('Tap a jeepney on the list to see its details.', 'Search your destination for jeepneys that pass by it.') + '</div>' +
         '</div>' +
         bottomNav('routes');
     }
@@ -876,6 +956,14 @@
           paintList();
         });
         el.addEventListener('click', function (e) {
+          if (e.target.closest('[data-act="toggle-howto"]')) {
+            howto = !howto;
+            var box = DOM.qs(el, '#r-howto');
+            var btn = DOM.qs(el, '[data-act="toggle-howto"]');
+            if (box) box.hidden = !howto;
+            if (btn) { btn.classList.toggle('on', howto); btn.setAttribute('aria-expanded', howto ? 'true' : 'false'); }
+            return;
+          }
           if (e.target.closest('[data-act="clear-search"]')) {
             q = '';
             input.value = '';
@@ -992,13 +1080,13 @@
     var el = DOM.el(
       '<div class="screen plain">' +
         UI.appbar({
-          back: false,
+          exit: true,
           title: 'Saved',
           icon: '<span style="display:inline-flex">' + window.Icons.bookmarkFilled(22, 'fill="#173B5C"') + '</span>',
           right: '<span style="width:40px"></span>',
         }) +
         '<div class="scroll" style="padding:0 14px 16px">' +
-          UI.emptyState(window.Icons.bookmark(30), 'Nothing saved yet.') +
+          UI.emptyState(window.Icons.bookmark(30), 'Nothing saved yet') +
         '</div>' +
         bottomNav('saved') +
       '</div>'

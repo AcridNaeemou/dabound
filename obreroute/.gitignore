@@ -13,3 +13,9 @@ screenshots/uit-*.png
 # tooling (Playwright) is installed — never ship it, or the deploy's `npm install`
 # would pull a 100 MB+ browser stack for nothing.
 package-lock.json
+
+# Secrets — never commit these; set them as host environment variables instead.
+# (server.js reads process.env only, it does not load .env itself.)
+.env
+.env.*
+!.env.example

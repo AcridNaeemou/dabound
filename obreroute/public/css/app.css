@@ -72,7 +72,7 @@ html, body {
   color: var(--text);
   font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: var(--f-body);
-  line-height: 1.45;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
@@ -109,7 +109,7 @@ img { max-width: 100%; }
 .t-section { font-size: var(--f-section); font-weight: 700; letter-spacing: -0.2px; }
 .t-card { font-size: var(--f-card); font-weight: 600; }
 .t-body { font-size: var(--f-body); }
-.t-small { font-size: var(--f-small); color: var(--text2); }
+.t-small { font-size: var(--f-small); color: var(--text2); line-height: 1.55; }
 .t-cap { font-size: var(--f-cap); color: var(--text2); }
 .muted { color: var(--text2); }
 .navy { color: var(--navy); }
@@ -248,6 +248,14 @@ img { max-width: 100%; }
 .search-drop[hidden] { display: none; }
 .search-drop .drop-body { padding: 6px; }
 .search-drop .empty-state { padding: 18px 14px; }
+/* Idle hint shown while the search box is focused but empty: suggestions only
+   appear once the reader types, so the place list never dumps on focus. */
+.search-drop .drop-idle {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; color: var(--mid);
+  font-size: var(--f-cap); line-height: 1.5;
+}
+.search-drop .drop-idle svg { flex: none; opacity: .7; }
 
 /* ------------------------------------------------------- containers & rows */
 .container {
@@ -262,10 +270,10 @@ img { max-width: 100%; }
   padding: 14px 16px 10px; letter-spacing: -0.3px;
 }
 .container.bordered-navy { border-color: var(--navy); }
-.container.pad { padding: 14px; }
+.container.pad { padding: 15px 16px; }
 .container-body { padding: 0 14px 14px; }
 
-.pill-list { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.pill-list { display: flex; flex-direction: column; gap: 14px; padding: 12px; }
 .pill-list.flush { padding: 0; }
 
 /* navy pill row — real items (reference route list / jeepney list / nearby jeeps) */
@@ -282,8 +290,8 @@ img { max-width: 100%; }
 .pill-row:hover { filter: brightness(1.06); }
 .pill-row:active { transform: scale(.99); }
 .pill-row .pr-body { flex: 1; min-width: 0; }
-.pill-row .pr-title { display: block; font-size: var(--f-card); font-weight: 700; letter-spacing: -0.2px; }
-.pill-row .pr-sub { display: block; font-size: var(--f-small); color: rgba(255, 255, 255, 0.72); overflow: hidden; text-overflow: ellipsis; }
+.pill-row .pr-title { display: block; font-size: var(--f-card); font-weight: 700; letter-spacing: -0.2px; line-height: 1.35; }
+.pill-row .pr-sub { display: block; font-size: var(--f-small); color: rgba(255, 255, 255, 0.72); overflow: hidden; text-overflow: ellipsis; line-height: 1.45; margin-top: 2px; }
 .pill-row .pr-meta { text-align: right; flex: none; }
 .pill-row .pr-meta .eta-main { display: block; font-size: var(--f-small); font-weight: 700; }
 .pill-row .pr-meta .eta-cap { display: block; font-size: var(--f-cap); color: rgba(255, 255, 255, 0.66); }
@@ -324,16 +332,17 @@ img { max-width: 100%; }
 .line-row .lr-sub { display: block; font-size: var(--f-small); color: var(--text2); }
 
 /* stat list — the reference tracking card (ETA: / Distance: / Average Speed:) */
-.stat-list { padding: 4px 2px 0; }
-.stat-list .sl-row { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; }
+.stat-list { padding: 6px 2px 0; }
+.stat-list .sl-row { display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--light); }
+.stat-list .sl-row:last-child { border-bottom: none; }
 .stat-list .sl-k { font-size: var(--f-card); font-weight: 700; color: var(--navy); flex: none; min-width: 138px; }
 .stat-list .sl-v { font-size: var(--f-card); font-weight: 500; color: var(--text); }
 .stat-list .sl-v.big { font-size: 19px; font-weight: 700; color: var(--navy); }
 
 /* label box — reference "Start: Obrero / End: …" grey box */
-.label-box { background: #d7dbe0; border-radius: var(--shell-sm); padding: 14px 16px; }
+.label-box { background: #d7dbe0; border-radius: var(--shell-sm); padding: 15px 17px; line-height: 1.5; }
 .label-box .lb-line { font-size: var(--f-card); font-weight: 600; color: #22303c; }
-.label-box .lb-line + .lb-line { margin-top: 10px; }
+.label-box .lb-line + .lb-line { margin-top: 12px; }
 .label-box .lb-dots { letter-spacing: 2px; color: #8b959e; }
 
 /* navy pill title used on route detail */
@@ -345,7 +354,7 @@ img { max-width: 100%; }
 }
 
 /* --------------------------------------------------------------- forms */
-.field { margin-bottom: 16px; }
+.field { margin-bottom: 18px; }
 .field > label { display: block; font-size: var(--f-card); font-weight: 700; color: var(--text); margin-bottom: 8px; }
 .input, .select, textarea.input {
   width: 100%; min-height: 48px; padding: 10px 16px;
@@ -506,8 +515,8 @@ img { max-width: 100%; }
 .tips { border: 1.5px solid var(--navy); border-radius: var(--shell-sm); background: var(--white); overflow: hidden; }
 .tips .tips-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1.5px solid var(--navy); }
 .tips .tips-head .th-title { font-size: var(--f-card); font-weight: 700; color: var(--navy); letter-spacing: -0.2px; }
-.tips ul { padding: 12px 16px 14px; }
-.tips li { font-size: var(--f-card); color: var(--text); display: flex; gap: 10px; margin-bottom: 6px; }
+.tips ul { padding: 14px 16px 16px; }
+.tips li { font-size: var(--f-card); color: var(--text); display: flex; gap: 10px; margin-bottom: 11px; line-height: 1.5; }
 .tips li:last-child { margin-bottom: 0; }
 .tips li::before { content: '•'; color: var(--navy); font-weight: 700; }
 
@@ -528,7 +537,7 @@ img { max-width: 100%; }
 .pill .dot.pulse { animation: dot-pulse 1.6s ease-out infinite; }
 @keyframes dot-pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.5); } 70% { box-shadow: 0 0 0 8px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
 
-.alert { display: flex; gap: 10px; align-items: flex-start; background: #fdecec; border: 1px solid #f6cfcf; color: #912727; border-radius: var(--shell-sm); padding: 12px 14px; font-size: var(--f-small); }
+.alert { display: flex; gap: 10px; align-items: flex-start; background: #fdecec; border: 1px solid #f6cfcf; color: #912727; border-radius: var(--shell-sm); padding: 13px 15px; font-size: var(--f-small); line-height: 1.5; }
 .alert.info { background: var(--navy-100); border-color: #cddbe8; color: var(--navy); }
 .alert.warn { background: var(--yellow-100); border-color: #f2ddaa; color: #8a6100; }
 
@@ -554,7 +563,7 @@ img { max-width: 100%; }
 .kv .v { font-size: var(--f-small); font-weight: 600; }
 
 /* steps (stops list) */
-.step-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--light); }
+.step-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px dashed var(--light); }
 .step-row:last-child { border-bottom: none; }
 .step-num { width: 30px; height: 30px; min-width: 30px; border-radius: var(--pill); background: var(--navy); color: var(--yellow); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .step-row .sr-body { flex: 1; min-width: 0; }
@@ -579,8 +588,17 @@ img { max-width: 100%; }
   background-clip: content-box; background-origin: content-box; background-repeat: no-repeat; }
 
 /* ---------------------------------------------------- empty / loading */
-.empty { padding: 34px 22px; text-align: center; color: var(--text2); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+/* Empty states sit in the optical centre of the screen rather than hugging the
+   search bar. min-height is generous on purpose — the frame scrolls. */
+.empty {
+  padding: 34px 22px; text-align: center; color: var(--text2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  min-height: max(260px, calc(100dvh - 330px));
+}
 .empty .em-icon { color: var(--mid); }
+.empty .t-card { letter-spacing: -0.2px; }
+/* …but never inside the destination dropdown, which is only as tall as it needs to be */
+.search-drop .empty { min-height: 0; padding: 20px 16px; }
 .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid rgba(23,59,92,.18); border-top-color: var(--navy); animation: spin 700ms linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-row { display: flex; align-items: center; gap: 8px; color: var(--text2); font-size: var(--f-small); padding: 16px; justify-content: center; }
@@ -649,10 +667,10 @@ img { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 
 /* ---- passenger home: under-map block (deck p-04 tips / p-06 list) ---- */
-.p-under { padding: 12px 14px 6px; }
-.p-under-title { font-size: var(--f-page); font-weight: 700; color: var(--navy); padding: 2px 4px 10px; }
+.p-under { padding: 14px 16px 8px; }
+.p-under-title { font-size: var(--f-page); font-weight: 700; color: var(--navy); padding: 4px 4px 12px; }
 .pill-row.tinted.dim { opacity: .74; }
-.track-sub { font-size: var(--f-small); color: var(--text2); text-align: center; margin: 2px 0 10px; }
+.track-sub { font-size: var(--f-small); color: var(--text2); text-align: center; margin: 5px 0 14px; line-height: 1.5; }
 
 /* ---- deck marker style: coloured dots, tracked jeep = dot + arrow + name ---- */
 .mk-jeep-dot { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
@@ -665,9 +683,52 @@ img { max-width: 100%; }
 .mk-name { position: absolute; left: calc(100% + 7px); top: 50%; transform: translateY(-50%); background: #fff;
   border-radius: 7px; padding: 2px 7px; font-size: 11px; font-weight: 700; color: var(--mk, #D7263D); white-space: nowrap;
   box-shadow: 0 2px 8px rgba(23,59,92,.18); }
-.mk-user-wrap { position: relative; display: block; width: 20px; height: 20px; }
-.mk-user-label { position: absolute; left: 26px; top: 2px; background: #fff; border-radius: 6px; padding: 2px 7px;
-  font-size: 10.5px; font-weight: 600; color: var(--navy); white-space: nowrap; box-shadow: 0 2px 6px rgba(23,59,92,.18); }
+/* ---- the reader's own position: blue dot + pulsing halo (never a pin) ---- */
+.mk-user-wrap { position: relative; display: block; width: 22px; height: 22px; }
+.mk-user-dot {
+  position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+  border-radius: var(--pill); background: #2563eb; border: 2.5px solid #fff;
+  box-shadow: 0 1px 5px rgba(15,30,45,.45);
+}
+.mk-user-halo {
+  position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+  border-radius: var(--pill); background: rgba(37,99,235,.28); animation: user-halo 2.2s ease-out infinite;
+}
+@keyframes user-halo { 0% { transform: scale(1); opacity: .85; } 100% { transform: scale(3.1); opacity: 0; } }
+/* once the reader has confirmed "yes, this is me" the dot settles and stops pulsing */
+.mk-user-wrap.confirmed .mk-user-halo { animation: none; opacity: .22; transform: scale(1.9); }
+.mk-user-wrap.confirmed .mk-user-dot { background: #1d4ed8; }
+.leaflet-marker-icon[style*="cursor: move"] .mk-user-dot,
+.mk-user-wrap.draggable .mk-user-dot { cursor: grab; }
+
+/* ---- the destination: yellow teardrop pin with a GO flag (never a dot) ---- */
+.mk-dest { position: relative; display: block; width: 32px; height: 42px; }
+.mk-dest-pin {
+  position: absolute; left: 50%; top: 0; width: 26px; height: 26px; margin-left: -13px;
+  border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  background: var(--yellow); border: 2.5px solid var(--navy); box-shadow: 0 2px 7px rgba(15,30,45,.4);
+}
+.mk-dest-pin::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px;
+  border-radius: var(--pill); background: var(--navy);
+}
+.mk-dest-flag {
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+  background: var(--navy); color: var(--yellow); border-radius: 5px; padding: 1px 5px;
+  font-size: 9px; font-weight: 700; letter-spacing: .04em; line-height: 1.35; white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(15,30,45,.35);
+}
+
+/* ---- two-tone (split colour) jeepney dots ---- */
+.mk-jeep-dot.two-tone .mk-dot {
+  background: linear-gradient(90deg, var(--mk, #D7263D) 0 50%, var(--mk2, #2D6CDF) 50% 100%);
+}
+.mk-jeep-dot.two-tone .mk-arrow { border-bottom-color: var(--mk, #D7263D); }
+
+/* ---- "How to ride" toggle in the Routes search bar ---- */
+.icon-btn.on { background: var(--navy); color: var(--yellow); }
+.icon-btn.on:hover { background: var(--navy-700); }
+.howto-box { margin: 4px 0 14px; }
 
 /* route-editor polygon handles (spec 43, 174) */
 .mk-corner { width: 16px; height: 16px; border-radius: var(--pill); background: var(--yellow);
@@ -722,6 +783,21 @@ input:not([type="checkbox"]), select { min-height: 44px; }
 }
 .map-confirm[hidden] { display: none; }
 .map-confirm .bar-action { flex: 1; }
+/* "Are you here?" — a column card, not the side-by-side pick confirm.
+   It sits at the TOP of the map: the bottom-right is occupied by the locate /
+   pick control column, and this card only ever shows when not in pick mode (so
+   it never collides with .map-hint either). */
+.map-confirm.user-confirm {
+  top: 12px; bottom: auto; left: 14px; right: 14px;
+  flex-direction: column; gap: 6px; align-items: stretch;
+  border-radius: var(--shell-sm); padding: 12px 14px; border-color: #2563eb;
+}
+.map-confirm.user-confirm .uc-title {
+  display: flex; align-items: center; gap: 7px;
+  font-size: var(--f-card); font-weight: 700; color: var(--navy);
+}
+.map-confirm.user-confirm .uc-sub { font-size: var(--f-small); color: var(--text2); }
+.map-confirm.user-confirm .uc-actions { display: flex; gap: 8px; margin-top: 4px; }
 .map-controls .icon-btn.picking { background: var(--navy); color: #fff; border-color: var(--navy); }
 
 /* admin-key dialog (public deployments) */
@@ -730,3 +806,49 @@ input:not([type="checkbox"]), select { min-height: 44px; }
 /* locate-me feedback: the button shows it is working, the strip explains failures */
 .icon-btn.busy { opacity: .55; pointer-events: none; animation: loc-pulse 1.1s ease-in-out infinite; }
 @keyframes loc-pulse { 0%, 100% { opacity: .45; } 50% { opacity: .8; } }
+
+/* ==========================================================================
+   Colour picker (route + jeepney editors)
+   A native <input type="color"> gives the OS colour wheel on phones; it is
+   visually hidden behind a round swatch so the row still matches the design.
+   ========================================================================== */
+.cpicker { display: flex; flex-direction: column; gap: 12px; }
+.cp-main { display: flex; align-items: center; gap: 12px; }
+.cp-wheel { position: relative; display: inline-flex; flex: none; width: 46px; height: 46px; cursor: pointer; }
+.cp-wheel.small { width: 38px; height: 38px; }
+.cp-wheel input[type="color"] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; border: none; padding: 0;
+}
+.cp-wheel-face {
+  width: 100%; height: 100%; border-radius: var(--pill);
+  border: 3px solid #fff; box-shadow: var(--shadow-1), 0 0 0 1.5px var(--line);
+  pointer-events: none;
+}
+.cp-wheel-ring {
+  position: absolute; inset: -4px; border-radius: var(--pill);
+  border: 2px solid transparent; pointer-events: none;
+}
+.cp-wheel:focus-within .cp-wheel-ring { border-color: var(--navy); }
+.cp-presets { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; min-width: 0; }
+.cp-preset {
+  width: 30px; height: 30px; border-radius: var(--pill);
+  border: 3px solid transparent; box-shadow: 0 0 0 1.5px rgba(23,59,92,.14);
+}
+.cp-preset.on { border-color: var(--navy); }
+.cp-two { display: flex; align-items: center; gap: 9px; font-size: var(--f-body); font-weight: 600; color: var(--text); cursor: pointer; }
+.cp-two input { width: 19px; height: 19px; accent-color: var(--navy); cursor: pointer; }
+.cp-second { display: flex; align-items: center; gap: 12px; }
+.cp-second[hidden] { display: none; }
+.cp-hint { font-size: var(--f-small); color: var(--text2); flex: 1; min-width: 0; }
+.cp-preview { display: flex; justify-content: center; align-items: center; gap: 14px; padding: 4px 0 0; }
+
+/* collapsible colour panel under the route-editor toolbar */
+.color-panel {
+  flex: none; padding: 14px 16px 16px; border-bottom: 1.5px solid var(--line);
+  background: var(--bg); animation: panel-in 160ms ease-out;
+}
+.color-panel[hidden] { display: none; }
+@keyframes panel-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.cp-title { font-size: var(--f-card); font-weight: 700; color: var(--text); margin-bottom: 12px; letter-spacing: -0.2px; }
+.color-dot[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--navy-100), var(--shadow-1); }

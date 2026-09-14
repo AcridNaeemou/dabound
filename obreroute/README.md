@@ -222,7 +222,6 @@ GPS PHONE  ──POST /api/devices/:id/location (≈2 s)──►  NODE BACKEND 
 | POST | `/api/devices/:id/place` | jump the device to a % of its route |
 | POST | `/api/road-route` | OSRM proxy used by the route editor (straight-line fallback offline) |
 | GET/POST | `/api/destinations` | destination list / create |
-| POST | `/api/admin/login` | admin login (MVP-level auth) |
 | POST | `/api/reset` | restore the seeded demo data |
 
 ### Data model

@@ -64,18 +64,31 @@
     var roof = muted ? '#98A2AC' : shade(c, -0.16);
     var stripe = muted ? '#C7CDD3' : '#F9C74F';
     var glass = muted ? '#E4E8EB' : '#D8EFFB';
+    // Two-tone: the body and roof are each drawn as a left and a right half, so
+    // the jeepney reads as half one colour, half the other.
+    var c2 = muted ? null : opts.color2 || null;
+    var body2 = c2 ? c2 : body;
+    var roof2 = c2 ? shade(c2, -0.16) : roof;
+    var bodyShape = c2
+      ? '<path d="M11 19H36v16H11a3 3 0 0 1-3-3V22a3 3 0 0 1 3-3z" fill="' + body + '"/>' +
+        '<path d="M36 19h25a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H36z" fill="' + body2 + '"/>'
+      : '<rect x="8" y="19" width="56" height="16" rx="3" fill="' + body + '"/>';
+    var roofShape = c2
+      ? '<path d="M13 19v-6a4 4 0 0 1 4-4h19v10z" fill="' + roof + '"/>' +
+        '<path d="M36 9h19a4 4 0 0 1 4 4v6H36z" fill="' + roof2 + '"/>'
+      : '<path d="M13 19v-6a4 4 0 0 1 4-4h38a4 4 0 0 1 4 4v6z" fill="' + roof + '"/>';
     return (
       '<svg class="jeep-art-svg" width="' + s + '" height="' + s + '" viewBox="0 0 72 50" aria-hidden="true">' +
       '<ellipse cx="36" cy="44" rx="24" ry="3" fill="rgba(23,59,92,.14)"/>' +
       // roof + cabin
-      '<path d="M13 19v-6a4 4 0 0 1 4-4h38a4 4 0 0 1 4 4v6z" fill="' + roof + '"/>' +
+      roofShape +
       // window band
       '<rect x="19" y="10" width="39" height="8" rx="1.6" fill="' + glass + '"/>' +
       '<path d="M29 10v8M39 10v8M49 10v8" stroke="' + roof + '" stroke-width="1.6"/>' +
       // windshield
       '<path d="M13 19v-6.5l6-3.4v9.9z" fill="' + glass + '" opacity=".95"/>' +
       // body
-      '<rect x="8" y="19" width="56" height="16" rx="3" fill="' + body + '"/>' +
+      bodyShape +
       // chrome front + grille
       '<rect x="4.5" y="21" width="6" height="12" rx="2" fill="#CFD6DD"/>' +
       '<path d="M6 24h3.5M6 27h3.5M6 30h3.5" stroke="#9AA4AE" stroke-width="1.1"/>' +
@@ -114,6 +127,27 @@
 
   var PALETTE = ['#D7263D', '#2D6CDF', '#C2185B', '#0E9F6E', '#F9A825', '#6D28D9'];
 
+  /** Deterministic colour for an id, so an uncoloured route is still stable. */
+  function colorFor(seed) {
+    var s = String(seed || '');
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997;
+    return PALETTE[h % PALETTE.length];
+  }
+
+  /**
+   * Resolve the one-or-two colours of a route or jeepney into the shape the
+   * avatar/marker helpers expect: { color, color2 } where color2 is null for a
+   * single solid colour.
+   */
+  function toneFor(thing, fallbackSeed) {
+    thing = thing || {};
+    var color = thing.color || (fallbackSeed ? colorFor(fallbackSeed) : PALETTE[0]);
+    var color2 = thing.color2 || null;
+    if (color2 && String(color2).toLowerCase() === String(color).toLowerCase()) color2 = null;
+    return { color: color, color2: color2 };
+  }
+
   /* keep the document title in sync with the brand constant */
   try { document.title = BRAND_NAME + ' \u2014 Davao jeepney tracker'; } catch (e) { /* noop */ }
 
@@ -129,11 +163,7 @@
     jeepGlyph: jeepGlyph,
     pinGlyph: pinGlyph,
     palette: PALETTE,
-    colorFor: function (seed) {
-      var s = String(seed || '');
-      var h = 0;
-      for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997;
-      return PALETTE[h % PALETTE.length];
-    },
+    colorFor: colorFor,
+    toneFor: toneFor,
   };
 })();

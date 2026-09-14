@@ -30,7 +30,7 @@
     return UI.pillRow({
       variant: muted ? 'placeholder' : '',
       attrs: ' data-device="' + UI.esc(device.id) + '"',
-      lead: window.Brand.jeepAvatar(colorOf(device), 54, { muted: muted }),
+      lead: window.Brand.jeepAvatar(colorOf(device), 54, { muted: muted, color2: muted ? null : device.color2 || null }),
       title: 'Jeep: ' + device.name.replace(/^Jeepney\s*/i, ''),
       sub:
         '<span>' + sub + '</span>' +
@@ -115,10 +115,11 @@
                 '<span class="mr-label">Jeepney Info</span>' +
                 '<span class="mr-chev">' + window.Icons.chevRight(20) + '</span>' +
               '</button>' +
-            '</div>' +
-            '<div class="card tight" style="margin-top:16px;display:flex;gap:10px;align-items:flex-start">' +
-              '<span style="flex:none;display:inline-flex;color:var(--navy)">' + window.Icons.phone(20) + '</span>' +
-              '<span class="t-small" style="flex:1">GPS source: a cohort member\'s smartphone running <b>Driver mode</b>. Open a jeepney and tap <b>Open tracking mode</b>.</span>' +
+              '<button class="menu-row" data-nav="admin-places">' +
+                '<span class="mr-icon">' + window.Icons.building(22) + '</span>' +
+                '<span class="mr-label">Places</span>' +
+                '<span class="mr-chev">' + window.Icons.chevRight(20) + '</span>' +
+              '</button>' +
             '</div>' +
             '<div style="height:16px"></div>' +
           '</div>' +
@@ -151,7 +152,8 @@
       var routes = Store.state.routes.filter(function (r) { return !q || r.name.toLowerCase().indexOf(q.toLowerCase()) >= 0; });
       el.innerHTML =
         UI.appbar({
-          title: 'Route List',
+          bare: true,
+          title: '',
           right: '<button class="icon-btn" data-nav="admin-live" aria-label="Show all routes on the map">' + window.Icons.navigation(20) + '</button>',
         }) +
         '<div class="search-band">' +
@@ -169,7 +171,7 @@
                 var online = devs.filter(function (d) { return d.status === 'online'; }).length;
                 return UI.pillRow({
                   attrs: ' data-route="' + UI.esc(r.id) + '"',
-                  lead: window.Brand.jeepAvatar(colorOf(r), 56),
+                  lead: window.Brand.jeepAvatar(colorOf(r), 56, { color2: r.color2 || null }),
                   title: r.name,
                   sub:
                     '<span>' + UI.esc((r.startPoint && r.startPoint.name) + ' → ' + (r.endPoint && r.endPoint.name)) + '</span>' +
@@ -351,6 +353,7 @@
     var draft = {
       name: editing ? editing.name : '',
       color: (editing && editing.color) || window.Brand.colorFor('route-' + Math.random().toString(36).slice(2, 7)),
+      color2: (editing && editing.color2) || null,
       points: editing
         ? (editing.stops || []).slice().sort(function (a, b) { return a.order - b.order; }).map(function (s) {
             return { lat: s.latitude, lng: s.longitude, name: s.name, type: s.type };
@@ -384,15 +387,14 @@
     /* --- undo / redo -------------------------------------------------------
        Every edit snapshots the whole draft, so undo always steps back exactly
        one action (spec 45, 87, 91). */
-    function snap() { return JSON.stringify({ name: draft.name, color: draft.color, points: draft.points, path: draft.path, corridor: draft.corridor }); }
+    function snap() { return JSON.stringify({ name: draft.name, color: draft.color, color2: draft.color2, points: draft.points, path: draft.path, corridor: draft.corridor }); }
     function restore(json) {
       var d = JSON.parse(json);
-      draft.name = d.name; draft.color = d.color; draft.points = d.points;
+      draft.name = d.name; draft.color = d.color; draft.color2 = d.color2 || null; draft.points = d.points;
       draft.path = d.path; draft.corridor = d.corridor;
       var nameInput = DOM.qs(el, '#re-name');
       if (nameInput && nameInput.value !== d.name) nameInput.value = d.name;
-      var dot = DOM.qs(el, '[data-act="color"]');
-      if (dot) dot.style.background = d.color;
+      paintColorDot();
     }
     function pushHistory() {
       history.push(snap());
@@ -402,14 +404,60 @@
     function dirty() { return baseline != null && snap() !== baseline; }
     function commit() { history.length = 0; future.length = 0; baseline = snap(); }
 
+    /* ---- route colour: toolbar dot opens the picker panel ---- */
+    function paintColorDot() {
+      var dot = DOM.qs(el, '[data-act="color"]');
+      if (!dot) return;
+      var tone = window.Brand.toneFor({ color: draft.color, color2: draft.color2 }, draft.name);
+      dot.style.background = tone.color2
+        ? 'linear-gradient(90deg,' + tone.color + ' 0 50%,' + tone.color2 + ' 50% 100%)'
+        : tone.color;
+    }
+
+    var cpApi = null;
+    function toggleColorPanel() {
+      var panel = DOM.qs(el, '#re-colors');
+      if (!panel) return;
+      panel.hidden = !panel.hidden;
+      var dot = DOM.qs(el, '[data-act="color"]');
+      if (dot) dot.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+      if (!panel.hidden && !cpApi) {
+        cpApi = UI.wireColorPicker(
+          panel,
+          function (v) {
+            pushHistory();
+            draft.color = v.color;
+            draft.color2 = v.color2;
+            paintColorDot();
+            paintMap();
+          },
+          function (v) {
+            // live preview: how the route line and its jeepneys will look
+            return window.Brand.jeepAvatar(v.color, 54, { color2: v.color2 });
+          }
+        );
+      }
+      if (cpApi) cpApi.set(draft.color, draft.color2);
+    }
+
     function buildShell() {
+      var tone = window.Brand.toneFor({ color: draft.color, color2: draft.color2 }, draft.name);
       el.innerHTML =
         UI.appbar({ title: editing ? 'Edit Route' : 'New Route', bare: true }) +
         '<div class="editor-toolbar">' +
           '<button class="et-btn" data-act="undo" aria-label="Undo">' + window.Icons.undoArrow(22) + '</button>' +
           '<button class="et-btn" data-act="redo" aria-label="Redo">' + window.Icons.redoArrow(22) + '</button>' +
-          '<div style="flex:1;display:flex;justify-content:center"><button class="color-dot" data-act="color" aria-label="Route colour" style="background:' + draft.color + '"></button></div>' +
+          '<div style="flex:1;display:flex;justify-content:center">' +
+            '<button class="color-dot" data-act="color" aria-label="Route colour" aria-expanded="false" style="' +
+              (tone.color2
+                ? 'background:linear-gradient(90deg,' + tone.color + ' 0 50%,' + tone.color2 + ' 50% 100%)'
+                : 'background:' + tone.color) + '"></button>' +
+          '</div>' +
           '<button class="et-save" data-act="save">Save</button>' +
+        '</div>' +
+        '<div class="color-panel" id="re-colors" hidden>' +
+          '<div class="cp-title">Route colour</div>' +
+          UI.colorPickerHtml({ id: 'route', color: draft.color, color2: draft.color2 }) +
         '</div>' +
         '<div style="padding:10px 14px 0">' +
           '<div class="field" style="margin-bottom:8px">' +
@@ -479,7 +527,26 @@
 
       function preview() {
         if (!stroke) return;
-        kit.drawRoute({ path: stroke }, { showStops: false, labels: false, color: '#F9C74F' });
+        // show what is already drawn plus the line being dragged, so a second
+        // stroke visibly continues the first instead of replacing it
+        var all = (draft.path || []).concat(stroke);
+        kit.drawRoute({ path: all }, { showStops: false, labels: false, color: '#F9C74F' });
+      }
+
+      /* Join a freshly drawn stroke onto the path that is already there. Drawing a
+       * route is not one continuous gesture — roads bend, the finger lifts, the
+       * admin re-centres the map — so each stroke extends the previous one. */
+      function joinStrokes(base, add) {
+        if (!base || !base.length) return add;
+        if (!add || !add.length) return base;
+        var TOL = 25;                       // metres: close enough to be one junction
+        var head = base[0], tail = base[base.length - 1];
+        var a0 = add[0], a1 = add[add.length - 1];
+        if (window.Geo.haversine(tail, a0) <= TOL) return base.concat(add.slice(1));
+        if (window.Geo.haversine(head, a1) <= TOL) return add.concat(base.slice(1));
+        if (window.Geo.haversine(head, a0) <= TOL) return add.reverse().concat(base.slice(1));
+        if (window.Geo.haversine(tail, a1) <= TOL) return base.concat(add.slice(0, add.length - 1).reverse());
+        return base.concat(add);            // a separate leg: keep both
       }
 
       function distanceNow() {
@@ -507,18 +574,24 @@
         stroke = null;
         if (drawn.length < 2) { paintMap(); return; }
         pushHistory();
-        var path = simplify(drawn, 6);
+        var seg = simplify(drawn, 6);
         // snap the drawn ends onto the start/endpoint when they are close by
         var start = draft.points[0];
         var end = draft.points[draft.points.length - 1];
-        if (start && start.type === 'start' && window.Geo.haversine(path[0], start) < 60) path[0] = { lat: start.lat, lng: start.lng };
-        if (end && end.type === 'endpoint' && window.Geo.haversine(path[path.length - 1], end) < 60) {
-          path[path.length - 1] = { lat: end.lat, lng: end.lng };
+        if (start && start.type === 'start' && window.Geo.haversine(seg[0], start) < 60) seg[0] = { lat: start.lat, lng: start.lng };
+        if (end && end.type === 'endpoint' && window.Geo.haversine(seg[seg.length - 1], end) < 60) {
+          seg[seg.length - 1] = { lat: end.lat, lng: end.lng };
         }
-        draft.path = path;
+        // extend what is already drawn rather than starting over each stroke
+        var added = draft.path && draft.path.length ? seg.length - 1 : seg.length;
+        draft.path = joinStrokes(draft.path || [], seg);
         paintPoints();
         paintMap();
-        UI.toast('Path drawn — ' + path.length + ' points · ' + (distanceNow() / 1000).toFixed(1) + ' km');
+        UI.toast(
+          (draft.path.length > seg.length ? 'Stroke added — ' : 'Path drawn — ') +
+          added + ' new points · ' + draft.path.length + ' total · ' +
+          (distanceNow() / 1000).toFixed(1) + ' km'
+        );
       }
 
       kit.map.on('mouseup', endStroke);
@@ -763,6 +836,7 @@
       var payload = {
         name: name,
         color: draft.color,
+        color2: draft.color2 || null,
         stops: stops,
         path: draft.path,
         corridor: draft.corridor.length >= 3 ? draft.corridor : [],
@@ -806,6 +880,7 @@
         editing = r;
         draft.name = r.name || '';
         draft.color = r.color || draft.color;
+        draft.color2 = r.color2 || null;
         draft.points = (r.stops || []).slice().sort(function (a, b) { return a.order - b.order; }).map(function (st) {
           return { lat: st.latitude, lng: st.longitude, name: st.name, type: st.type };
         });
@@ -866,11 +941,7 @@
             return;
           }
           if (e.target.closest('[data-act="color"]')) {
-            var idx = window.Brand.palette.indexOf(draft.color);
-            draft.color = window.Brand.palette[(idx + 1) % window.Brand.palette.length];
-            var dot = DOM.qs(el, '[data-act="color"]');
-            if (dot) dot.style.background = draft.color;
-            UI.toast('Route colour updated');
+            toggleColorPanel();
             return;
           }
           if (e.target.closest('[data-act="generate"]')) return generatePath();
@@ -931,7 +1002,7 @@
           (route && route.name.toLowerCase().indexOf(q.toLowerCase()) >= 0);
       });
       el.innerHTML =
-        UI.appbar({ title: 'Jeepney Info' }) +
+        UI.appbar({ bare: true, title: '' }) +
         '<div class="search-band">' +
           '<div class="search">' +
             '<span class="search-icon">' + window.Icons.search(20) + '</span>' +
@@ -1029,7 +1100,7 @@
       el.innerHTML =
         UI.appbar({ title: 'Jeepney Info', bare: true }) +
         '<div class="scroll" style="padding:14px 16px 16px">' +
-          '<div style="display:flex;justify-content:center;margin-bottom:10px">' + window.Brand.jeepAvatar(colorOf(d), 88) + '</div>' +
+          '<div style="display:flex;justify-content:center;margin-bottom:10px">' + window.Brand.jeepAvatar(colorOf(d), 88, { color2: d.color2 || null }) + '</div>' +
           '<div id="addv-pills" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:16px">' + pills(d) + '</div>' +
           '<div class="field"><label>Name:</label><div class="input" style="display:flex;align-items:center;justify-content:center">' + UI.esc(d.name) + '</div></div>' +
           '<div class="field"><label>Route:</label><div class="input" style="display:flex;align-items:center;justify-content:center">' + UI.esc(route ? route.name : 'Not assigned') + '</div></div>' +
@@ -1170,26 +1241,19 @@
         '</div>';
 
       var color = editing ? colorOf(editing) : window.Brand.palette[0];
+      var color2 = (editing && editing.color2) || null;
       var host = DOM.qs(el, '#de-colors');
-      host.innerHTML = window.Brand.palette
-        .map(function (c) {
-          return '<button data-color="' + c + '" aria-label="Colour ' + c + '" style="width:30px;height:30px;border-radius:999px;background:' + c + ';border:3px solid ' + (c === color ? '#173B5C' : 'transparent') + '"></button>';
-        })
-        .join('');
+      host.innerHTML = UI.colorPickerHtml({ id: 'jeep', color: color, color2: color2 });
       var preview = DOM.qs(el, '#de-preview');
-      preview.innerHTML = window.Brand.jeepAvatar(color, 84);
       var sw = DOM.qs(el, '#de-active');
       sw.addEventListener('click', function () { sw.classList.toggle('on'); });
-      host.addEventListener('click', function (e) {
-        var b = e.target.closest('[data-color]');
-        if (!b) return;
-        color = b.dataset.color;
-        DOM.qsa(host, '[data-color]').forEach(function (x) {
-          x.style.border = '3px solid ' + (x.dataset.color === color ? '#173B5C' : 'transparent');
-        });
-        preview.innerHTML = window.Brand.jeepAvatar(color, 84);
-      });
+      UI.wireColorPicker(
+        host,
+        function (v) { color = v.color; color2 = v.color2; },
+        function (v) { return window.Brand.jeepAvatar(v.color, 84, { color2: v.color2 }); }
+      );
       el._color = function () { return color; };
+      el._color2 = function () { return color2; };
     }
 
     return {
@@ -1211,6 +1275,7 @@
               type: DOM.qs(el, '#de-type').value,
               phone: DOM.qs(el, '#de-phone').value.trim(),
               color: el._color(),
+              color2: el._color2 ? el._color2() : null,
               active: DOM.qs(el, '#de-active').classList.contains('on'),
             };
             var errs = [];
@@ -1387,7 +1452,7 @@
       el.innerHTML =
         UI.appbar({ title: window.Brand.name.toUpperCase() + ' DRIVER' }) +
         '<div class="scroll" style="padding:14px 16px 16px">' +
-          '<div style="display:flex;justify-content:center;margin-bottom:12px">' + window.Brand.jeepAvatar(colorOf(d), 92) + '</div>' +
+          '<div style="display:flex;justify-content:center;margin-bottom:12px">' + window.Brand.jeepAvatar(colorOf(d), 92, { color2: d.color2 || null }) + '</div>' +
           '<div class="title-pill" style="margin-bottom:12px">' + UI.esc(d.name) + '</div>' +
           '<div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px">' +
             '<span class="pill ' + (active ? 'online' : 'offline') + ' lg"><i class="dot' + (active ? ' pulse' : '') + '"></i>' + (active ? 'GPS ACTIVE' : 'GPS STOPPED') + '</span>' +
@@ -1496,6 +1561,240 @@
     };
   }
 
+  /* ---------------------------------------------------------- places list */
+  /* Destinations are the places passengers can search for. They ship as a small
+   * curated Davao list, but an admin can grow or trim it here so the product is
+   * never dependent on baked-in content. */
+  function adminPlaceListScreen() {
+    var el = DOM.el('<div class="screen plain"></div>');
+    var q = '';
+
+    function matches() {
+      var s = q.trim().toLowerCase();
+      return Store.state.destinations.filter(function (d) {
+        return !s ||
+          d.name.toLowerCase().indexOf(s) >= 0 ||
+          (d.address || '').toLowerCase().indexOf(s) >= 0;
+      });
+    }
+
+    function row(d) {
+      var n = (d.routeIds || []).length;
+      return (
+        '<button class="line-row" data-place="' + UI.esc(d.id) + '">' +
+          '<span style="flex:none;display:inline-flex;color:var(--yellow)">' + window.Icons.pinFilled(24) + '</span>' +
+          '<span class="lr-body">' +
+            '<span class="lr-title nowrap">' + UI.esc(d.name) + '</span>' +
+            '<span class="lr-sub nowrap">' + UI.esc(d.address || 'Davao City') + '</span>' +
+          '</span>' +
+          '<span class="t-small" style="flex:none;color:var(--text2)">' +
+            (n ? n + ' route' + (n > 1 ? 's' : '') : 'no routes') +
+          '</span>' +
+        '</button>'
+      );
+    }
+
+    function render() {
+      var list = matches();
+      el.innerHTML =
+        UI.appbar({
+          bare: true,
+          title: '',
+          right: '<button class="icon-btn" data-act="add" aria-label="Add a place">' + window.Icons.plus(22) + '</button>',
+        }) +
+        '<div class="search-band">' +
+          '<div class="search">' +
+            '<span class="search-icon">' + window.Icons.search(20) + '</span>' +
+            '<input id="pl-search" placeholder="Search places" value="' + UI.esc(q) + '" aria-label="Search places" />' +
+            '<button class="clear" data-act="clear-search" aria-label="Clear">' + window.Icons.x(20) + '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="scroll">' +
+          '<div class="section-label">Places passengers can search · ' + Store.state.destinations.length + '</div>' +
+          '<div class="card list">' +
+            (list.length
+              ? list.map(row).join('')
+              : UI.emptyState(window.Icons.pinFilled(28), 'No places yet', 'Add the malls, schools and landmarks passengers search for')) +
+          '</div>' +
+          '<div style="height:16px"></div>' +
+        '</div>';
+    }
+
+    return {
+      el: el,
+      mount: function () {
+        render();
+        el.addEventListener('input', function (e) {
+          if (e.target.id === 'pl-search') { q = e.target.value; render(); DOM.qs(el, '#pl-search').focus(); }
+        });
+        el.addEventListener('click', function (e) {
+          if (e.target.closest('[data-act="add"]')) { window.Router.go('admin-place-editor'); return; }
+          if (e.target.closest('[data-act="clear-search"]')) { q = ''; render(); return; }
+          var rowEl = e.target.closest('[data-place]');
+          if (rowEl) window.Router.go('admin-place-editor', { placeId: rowEl.dataset.place });
+        });
+      },
+      update: render,
+    };
+  }
+
+  /* -------------------------------------------------------- place editor */
+  function adminPlaceEditorScreen(params) {
+    var placeId = params && params.placeId ? params.placeId : null;
+    var editing = placeId ? Store.state.destinations.find(function (d) { return d.id === placeId; }) || null : null;
+    var el = DOM.el('<div class="screen plain"></div>');
+    var kit = null;
+    var dirty = false;
+    var pos = editing
+      ? { lat: editing.latitude, lng: editing.longitude }
+      : { lat: 7.0730, lng: 125.6120 };   // Davao City centre
+
+    function alertHtml(msg) {
+      return '<div class="alert" style="margin-top:12px">' + window.Icons.alert(16) + '<span>' + UI.esc(msg) + '</span></div>';
+    }
+
+    function readForm() {
+      return {
+        name: (DOM.qs(el, '#pl-name').value || '').trim(),
+        address: (DOM.qs(el, '#pl-address').value || '').trim() || 'Davao City',
+        latitude: +DOM.qs(el, '#pl-lat').value,
+        longitude: +DOM.qs(el, '#pl-lng').value,
+        routeIds: Array.prototype.slice.call(el.querySelectorAll('[data-route-link]:checked'))
+          .map(function (c) { return c.dataset.routeLink; }),
+      };
+    }
+
+    function paintPin() {
+      if (!kit) return;
+      kit.clearDestination();
+      kit.setDestination(pos, readForm().name || 'Place');
+      var lat = DOM.qs(el, '#pl-lat');
+      var lng = DOM.qs(el, '#pl-lng');
+      if (lat) lat.value = (+pos.lat).toFixed(6);
+      if (lng) lng.value = (+pos.lng).toFixed(6);
+    }
+
+    function render() {
+      var routes = Store.state.routes;
+      el.innerHTML =
+        UI.appbar({ bare: true, title: editing ? 'Edit Place' : 'Add Place' }) +
+        '<div class="scroll" style="padding:14px 16px 16px">' +
+          '<div class="field"><label for="pl-name">Name:</label>' +
+            '<input class="input" id="pl-name" placeholder="Type here" value="' + UI.esc(editing ? editing.name : '') + '" /></div>' +
+          '<div class="field"><label for="pl-address">Address:</label>' +
+            '<input class="input" id="pl-address" placeholder="Type here" value="' + UI.esc(editing ? editing.address || '' : '') + '" />' +
+            '<div class="hint">Shown under the name in the passenger search.</div></div>' +
+          '<div class="field"><label>Position on the map</label>' +
+            '<div class="map" id="pl-map" style="height:220px;border-radius:var(--r-md);border:1px solid var(--line);overflow:hidden"></div>' +
+            '<div class="hint">Tap the map to drop the pin, or type exact coordinates below.</div></div>' +
+          '<div style="display:flex;gap:12px">' +
+            '<div class="field" style="flex:1"><label for="pl-lat">Latitude</label>' +
+              '<input class="input plain" id="pl-lat" inputmode="decimal" value="' + (+pos.lat).toFixed(6) + '" /></div>' +
+            '<div class="field" style="flex:1"><label for="pl-lng">Longitude</label>' +
+              '<input class="input plain" id="pl-lng" inputmode="decimal" value="' + (+pos.lng).toFixed(6) + '" /></div>' +
+          '</div>' +
+          '<div class="section-label">Jeepney routes that stop here</div>' +
+          (routes.length
+            ? '<div class="card list">' + routes.map(function (r) {
+                var on = editing && (editing.routeIds || []).indexOf(r.id) >= 0;
+                return (
+                  '<label class="line-row" style="cursor:pointer">' +
+                    '<input type="checkbox" data-route-link="' + UI.esc(r.id) + '"' + (on ? ' checked' : '') + ' style="width:20px;height:20px;flex:none" />' +
+                    '<span class="lr-body"><span class="lr-title nowrap">' + UI.esc(r.name) + '</span></span>' +
+                  '</label>'
+                );
+              }).join('') + '</div>'
+            : UI.emptyState(window.Icons.routeIcon(26), 'No routes yet', 'Create a route first, then link it here')) +
+          '<div id="pl-error"></div>' +
+          '<div class="bar-stack" style="padding:16px 0 0">' +
+            '<button class="bar-action" data-act="save">Save</button>' +
+            (editing ? '<button class="bar-action danger" data-act="delete">Delete</button>' : '') +
+          '</div>' +
+          '<div style="height:16px"></div>' +
+        '</div>';
+    }
+
+    function mountMap() {
+      var host = DOM.qs(el, '#pl-map');
+      if (!host) return;
+      kit = window.MapKit.create(host);
+      kit.onTap(function (latlng) {
+        pos = { lat: latlng.lat, lng: latlng.lng };
+        dirty = true;
+        paintPin();
+      });
+      kit.map.setView([pos.lat, pos.lng], editing ? 15 : 13, { animate: false });
+      paintPin();
+    }
+
+    return {
+      el: el,
+      mount: function () {
+        render();
+        mountMap();
+        el.addEventListener('input', function (e) {
+          dirty = true;
+          if (e.target.id === 'pl-lat' || e.target.id === 'pl-lng') {
+            var lat = +DOM.qs(el, '#pl-lat').value;
+            var lng = +DOM.qs(el, '#pl-lng').value;
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+              pos = { lat: lat, lng: lng };
+              if (kit) { kit.clearDestination(); kit.setDestination(pos, readForm().name || 'Place'); kit.map.setView([lat, lng], kit.map.getZoom(), { animate: true }); }
+            }
+          }
+        });
+        el.addEventListener('click', async function (e) {
+          if (e.target.closest('[data-act="save"]')) {
+            var f = readForm();
+            var err = DOM.qs(el, '#pl-error');
+            if (!f.name) { err.innerHTML = alertHtml('Give the place a name.'); return; }
+            if (!Number.isFinite(f.latitude) || f.latitude < -90 || f.latitude > 90 ||
+                !Number.isFinite(f.longitude) || f.longitude < -180 || f.longitude > 180) {
+              err.innerHTML = alertHtml('Latitude and longitude must be valid coordinates.');
+              return;
+            }
+            err.innerHTML = '';
+            try {
+              if (editing) await window.API.updateDestination(editing.id, f);
+              else await window.API.createDestination(f);
+              UI.toast(editing ? 'Place updated' : 'Place added', 'success');
+              window.Router.reset('admin-places');
+            } catch (e2) { err.innerHTML = alertHtml(e2.message); }
+            return;
+          }
+          if (e.target.closest('[data-act="delete"]')) {
+            var ok = await UI.confirm({
+              title: 'Delete this place?',
+              message: 'Passengers will no longer find "' + editing.name + '" in search.',
+              danger: true,
+              confirmLabel: 'Delete',
+            });
+            if (!ok) return;
+            try {
+              await window.API.deleteDestination(editing.id);
+              UI.toast('Place deleted', 'success');
+              window.Router.reset('admin-places');
+            } catch (e2) { UI.toast(e2.message, 'error'); }
+          }
+        });
+      },
+      update: function () {
+        if (dirty) return;                       // never wipe typing on a live update
+        if (!placeId) return;
+        var d = Store.state.destinations.find(function (x) { return x.id === placeId; });
+        if (!d) return;
+        editing = d;
+        pos = { lat: d.latitude, lng: d.longitude };
+        render();
+        mountMap();
+      },
+      unmount: function () {
+        if (kit) kit.destroy();
+        kit = null;
+      },
+    };
+  }
+
   window.Admin = {
     login: adminLoginScreen,
     profile: adminProfileScreen,
@@ -1508,5 +1807,7 @@
     liveMap: adminLiveMapScreen,
     driver: driverScreen,
     deviceRow: adminDeviceRow,
+    placeList: adminPlaceListScreen,
+    placeEditor: adminPlaceEditorScreen,
   };
 })();

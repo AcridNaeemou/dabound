@@ -68,7 +68,8 @@
     var back =
       o.back === false
         ? ''
-        : '<button class="back-chevron" data-nav="back" aria-label="Back">' + window.Icons.chevLeft(26) + '</button>';
+        : '<button class="back-chevron" data-nav="' + (o.exit ? 'exit' : 'back') + '" aria-label="' +
+          (o.exit ? 'Back to the launch screen' : 'Back') + '">' + window.Icons.chevLeft(26) + '</button>';
     var titleAttrs = o.titleColor ? ' style="color:' + esc(o.titleColor) + '"' : '';
     var lead = o.icon ? '<span class="appbar-lead">' + o.icon + '<div class="appbar-title"' + titleAttrs + '>' + esc(o.title || '') + '</div></span>' : null;
     return (
@@ -138,22 +139,39 @@
   }
 
   /* ------------------------------------------------------- tracking list row */
+  /** Short human distance with no trailing "away" — paired with an explicit suffix. */
+  function shortDistance(m) {
+    if (m == null || !isFinite(m)) return '';
+    if (m < 45) return 'right here';
+    if (m < 1000) return Math.round(m / 10) * 10 + ' m';
+    if (m < 10000) return (m / 1000).toFixed(1) + ' km';
+    return Math.round(m / 1000) + ' km';
+  }
+
   /** Nearby jeep row: colour/status dot • route name • distance • "ETA: x" (p-06). */
   function jeepCard(device, opts) {
     opts = opts || {};
     var route = window.Store.routeById(device.routeId);
+    // Default to where the reader is standing, so every caller gets the same answer.
+    if (!opts.origin && window.Store.session.userLocation) opts.origin = window.Store.session.userLocation;
     var ctx = tripContext(device, opts);
     var title = route ? route.name : device.name;
     var dot = device.color || (route && route.color) || window.Brand.colorFor(device.routeId || device.id);
-    var dist = ctx.distanceFromUserM != null ? ctx.distanceFromUserM : ctx.distanceM;
-    var sub = device.name + (dist != null ? ' \u00b7 ' + Geo.formatDistance(dist) : '');
+    var dot2 = device.color2 || (route && route.color2) || null;
+    /* Say what the number is measured from. Silently falling back between
+     * "from you" and "to the destination" is what made the old readout ambiguous. */
+    var distText = '';
+    if (ctx.distanceFromUserM != null) distText = shortDistance(ctx.distanceFromUserM) + ' from you';
+    else if (ctx.distanceM != null) distText = shortDistance(ctx.distanceM) + (ctx.target ? ' to ' + ctx.target : ' to destination');
+    var sub = device.name + (distText ? ' \u00b7 ' + distText : '');
     if (device.status !== 'online') {
       sub += ' \u00b7 ' + (device.ageMs != null ? 'last seen ' + Geo.formatRelative(device.ageMs) : 'no signal yet');
     }
     var eta = device.status !== 'online' ? 'ETA unavailable' : 'ETA: ' + Geo.formatEta(ctx.etaSec, device);
     return (
       '<button class="pill-row tinted' + (device.status === 'online' ? '' : ' dim') + '" data-device="' + esc(device.id) + '" type="button">' +
-      '<span style="flex:none;display:inline-flex"><span class="status-dot" style="background:' + esc(dot) + ';width:22px;height:22px"></span></span>' +
+      '<span style="flex:none;display:inline-flex"><span class="status-dot" style="width:22px;height:22px;background:' +
+        (dot2 ? 'linear-gradient(90deg,' + esc(dot) + ' 0 50%,' + esc(dot2) + ' 50% 100%)' : esc(dot)) + '"></span></span>' +
       '<span class="pr-body">' +
       '<span class="pr-title nowrap">' + esc(title) + '</span>' +
       '<span class="pr-sub nowrap">' + esc(sub) + '</span>' +
@@ -174,7 +192,7 @@
     var sub = esc(startN) + ' → ' + esc(endN) + (km ? ' · ' + km : '') + (route.isLoop ? ' · loop' : '');
     return (
       '<button class="pill-row light" data-route="' + esc(route.id) + '" type="button" style="min-height:74px">' +
-      window.Brand.jeepAvatar(opts.color || window.Brand.colorFor(route.id), 54) +
+      window.Brand.jeepAvatar(opts.color || route.color || window.Brand.colorFor(route.id), 54, { color2: route.color2 || null }) +
       '<span class="pr-body">' +
       '<span class="pr-title nowrap" style="font-size:17px">' + esc(route.name) + '</span>' +
       '<span class="pr-sub nowrap">' + sub + '</span>' +
@@ -219,10 +237,96 @@
     );
   }
 
+  /* --------------------------------------------------------- colour picker */
+  /* A real colour wheel (the native picker, which is a wheel/spectrum on phones)
+   * plus quick presets, plus an optional second colour. With two colours chosen
+   * the shape is rendered half and half. */
+  function colorPickerHtml(o) {
+    o = o || {};
+    var c1 = o.color || window.Brand.palette[0];
+    var c2 = o.color2 || '#2D6CDF';
+    var two = !!o.color2;
+    return (
+      '<div class="cpicker" data-cpicker="' + esc(o.id || 'main') + '">' +
+        '<div class="cp-main">' +
+          '<label class="cp-wheel" title="Pick a colour">' +
+            '<input type="color" data-cp="1" value="' + esc(c1) + '" aria-label="Main colour" />' +
+            '<span class="cp-wheel-face" style="background:' + esc(c1) + '"></span>' +
+            '<span class="cp-wheel-ring"></span>' +
+          '</label>' +
+          '<div class="cp-presets">' +
+            window.Brand.palette.map(function (p) {
+              return '<button type="button" class="cp-preset" data-preset="' + esc(p) + '" aria-label="Colour ' + esc(p) + '" style="background:' + esc(p) + '"></button>';
+            }).join('') +
+          '</div>' +
+        '</div>' +
+        '<label class="cp-two">' +
+          '<input type="checkbox" data-cp-two' + (two ? ' checked' : '') + ' />' +
+          '<span>Use two colours</span>' +
+        '</label>' +
+        '<div class="cp-second"' + (two ? '' : ' hidden') + '>' +
+          '<label class="cp-wheel small" title="Pick the second colour">' +
+            '<input type="color" data-cp="2" value="' + esc(c2) + '" aria-label="Second colour" />' +
+            '<span class="cp-wheel-face" style="background:' + esc(c2) + '"></span>' +
+            '<span class="cp-wheel-ring"></span>' +
+          '</label>' +
+          '<span class="cp-hint">The shape is drawn half in each colour</span>' +
+        '</div>' +
+        '<div class="cp-preview" data-cp-preview></div>' +
+      '</div>'
+    );
+  }
+
+  /**
+   * Wire a colour picker. `onChange({color, color2})` fires on every change and
+   * `preview({color, color2})` should return HTML for the live preview slot.
+   */
+  function wireColorPicker(root, onChange, preview) {
+    var box = root.querySelector ? root.querySelector('[data-cpicker]') : null;
+    if (!box) return null;
+    var in1 = box.querySelector('[data-cp="1"]');
+    var in2 = box.querySelector('[data-cp="2"]');
+    var two = box.querySelector('[data-cp-two]');
+    var second = box.querySelector('.cp-second');
+    var slot = box.querySelector('[data-cp-preview]');
+
+    function value() {
+      return { color: in1.value, color2: two.checked ? in2.value : null };
+    }
+    function paint() {
+      var v = value();
+      var f1 = box.querySelector('[data-cp="1"] + .cp-wheel-face');
+      var f2 = box.querySelector('[data-cp="2"] + .cp-wheel-face');
+      if (f1) f1.style.background = v.color;
+      if (f2) f2.style.background = v.color2 || in2.value;
+      if (second) second.hidden = !two.checked;
+      box.querySelectorAll('[data-preset]').forEach(function (b) {
+        b.classList.toggle('on', b.dataset.preset.toLowerCase() === String(v.color).toLowerCase());
+      });
+      if (slot && preview) slot.innerHTML = preview(v);
+      if (onChange) onChange(v);
+    }
+    in1.addEventListener('input', paint);
+    in2.addEventListener('input', paint);
+    two.addEventListener('change', paint);
+    box.querySelectorAll('[data-preset]').forEach(function (b) {
+      b.addEventListener('click', function () { in1.value = b.dataset.preset; paint(); });
+    });
+    paint();
+    return { value: value, set: function (c1, c2) {
+      if (c1) in1.value = c1;
+      two.checked = !!c2;
+      if (c2) in2.value = c2;
+      paint();
+    } };
+  }
+
   function emptyState(icon, title, message, actionHtml) {
+    // Trailing full stops read as noise in a centred empty state (design pass).
+    var t = String(title == null ? '' : title).replace(/\s*\.\s*$/, '');
     return (
       '<div class="empty">' + '<span class="em-icon">' + (icon || window.Icons.jeep(30)) + '</span>' +
-      '<div class="t-card">' + esc(title) + '</div>' +
+      '<div class="t-card">' + esc(t) + '</div>' +
       (message ? '<div class="t-small">' + esc(message) + '</div>' : '') +
       (actionHtml || '') + '</div>'
     );
@@ -279,10 +383,30 @@
     });
   }
 
+  /* A brief drop at startup (or a slow first fetch) must not slap a red banner
+   * over the app: only show it once the connection has genuinely been gone for a
+   * while, and hide it the moment it returns. */
+  var NET_GRACE_MS = 4000;
+  var netTimer = null;
+  var disconnectedSince = 0;
+
   function connectivityBanner() {
     var el = document.getElementById('net-banner');
     if (!el) return;
-    el.classList.toggle('show', !window.Store.state.connected);
+    clearTimeout(netTimer);
+    netTimer = null;
+    if (window.Store.state.connected) {
+      disconnectedSince = 0;
+      el.classList.remove('show');
+      return;
+    }
+    if (!disconnectedSince) disconnectedSince = Date.now();
+    var waited = Date.now() - disconnectedSince;
+    if (waited >= NET_GRACE_MS) {
+      el.classList.add('show');
+      return;
+    }
+    netTimer = setTimeout(connectivityBanner, NET_GRACE_MS - waited);
   }
 
   /* A public deployment can be locked with ADMIN_KEY (server.js). The first time a
@@ -343,6 +467,9 @@
     statList: statList,
     tripContext: tripContext,
     sortForList: sortForList,
+    shortDistance: shortDistance,
+    colorPickerHtml: colorPickerHtml,
+    wireColorPicker: wireColorPicker,
     emptyState: emptyState,
     loadingRow: loadingRow,
     connectivityBanner: connectivityBanner,
