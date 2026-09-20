@@ -525,9 +525,6 @@ img { max-width: 100%; }
 .mk-vertex { width: 14px; height: 14px; border-radius: 4px; background: #fff; border: 3px solid #e11d48; box-shadow: var(--shadow-1); cursor: grab; }
 .mk-vertex:active { cursor: grabbing; }
 .mk-landmark { width: 20px; height: 20px; border-radius: var(--pill); background: var(--yellow); border: 3px solid var(--white); box-shadow: var(--shadow-1); }
-.mk-start, .mk-end { width: 26px; height: 26px; border-radius: var(--pill); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; border: 2.5px solid var(--white); box-shadow: var(--shadow-1); }
-.mk-start { background: var(--navy); color: var(--yellow); }
-.mk-end { background: var(--yellow); color: var(--navy); }
 .mk-label, .mk-chip { background: var(--white); border: 1.5px solid var(--line); border-radius: 8px; padding: 3px 8px; font-size: 10px; font-weight: 600; color: var(--navy); box-shadow: var(--shadow-1); white-space: nowrap; }
 .mk-chip.navy { background: var(--navy); color: #fff; border-color: var(--navy); }
 
@@ -763,18 +760,6 @@ img { max-width: 100%; }
 .icon-btn.on { background: var(--navy); color: var(--yellow); }
 .icon-btn.on:hover { background: var(--navy-700); }
 .howto-box { margin: 4px 0 14px; }
-
-/* route-editor polygon handles (spec 43, 174) */
-.mk-corner { width: 16px; height: 16px; border-radius: var(--pill); background: var(--yellow);
-  border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(23,59,92,.45); }
-
-/* editor route-area row (spec 41-44, 92) */
-.area-row { display: flex; align-items: center; gap: 10px; padding: 10px 0 4px; margin-top: 6px; border-top: 1px solid var(--light); }
-.area-row .sr-body { flex: 1; min-width: 0; display: block; }
-.area-row .sr-body b { display: block; font-size: var(--f-card); font-weight: 700; color: var(--text); }
-.area-row .sr-sub { display: block; font-size: var(--f-small); color: var(--text2); }
-.area-chip { width: 28px; height: 28px; flex: none; border-radius: 10px; background: rgba(23,59,92,.1);
-  color: var(--navy); display: inline-flex; align-items: center; justify-content: center; }
 
 /* every tap target reaches the 44px minimum (spec 11) */
 button:not(.color-dot), [role="button"], a.pill-row, .menu-row, .step-row [data-remove], .step-row .select { min-height: 44px; }

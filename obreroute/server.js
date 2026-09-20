@@ -18,6 +18,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const Geo = require('./public/js/geo.js');
 
 /* Minimal .env loader — the app has no dependencies, so it does not pull in
@@ -308,17 +309,42 @@ function writeStateFile() {
 }
 
 let saveTimer = null, cfgTimer = null, posTimer = null;
+let saveQueuedAt = 0, posQueuedAt = 0;
 
 /* persist() is the single write point of the app: the local file is always kept as
  * a cache, and the database mirror piggybacks on it — configuration is written a
- * moment later, the GPS stream only refreshes the last known position. */
+ * moment later, the GPS stream only refreshes the last known position.
+ *
+ * The debounce has a hard cap. A pure reset-on-every-call debounce never fires
+ * while a big fleet keeps reporting (fixes arrive faster than the delay), which
+ * would keep everything — including an admin's route edits made mid-run — off
+ * the disk for as long as the traffic flows. Once a write has waited longer
+ * than the cap it is scheduled immediately instead of being pushed again. */
+const SAVE_DELAY_MS = 800;
+const SAVE_CAP_MS = 5000;
+const POS_DELAY_MS = 9000;
+const POS_CAP_MS = 30000;
+
 function persist(opts) {
+  const now = Date.now();
+  if (!saveQueuedAt) saveQueuedAt = now;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(writeStateFile, 800);
+  if (now - saveQueuedAt >= SAVE_CAP_MS) {
+    saveQueuedAt = 0;
+    saveTimer = setTimeout(writeStateFile, 0);
+  } else {
+    saveTimer = setTimeout(() => { saveQueuedAt = 0; writeStateFile(); }, SAVE_DELAY_MS);
+  }
   if (!SB_ON) return;
   if (opts && opts.positions) {
+    if (!posQueuedAt) posQueuedAt = now;
     clearTimeout(posTimer);
-    posTimer = setTimeout(sdSyncPositions, 9000);
+    if (now - posQueuedAt >= POS_CAP_MS) {
+      posQueuedAt = 0;
+      posTimer = setTimeout(sdSyncPositions, 0);
+    } else {
+      posTimer = setTimeout(() => { posQueuedAt = 0; sdSyncPositions(); }, POS_DELAY_MS);
+    }
     return;
   }
   clearTimeout(cfgTimer);
@@ -726,7 +752,7 @@ function startSimulator(deviceId, opts) {
   return true;
 }
 
-function stopSimulator(deviceId) {
+function stopSimulator(deviceId, quiet) {
   const t = simTimers.get(deviceId);
   if (t) clearInterval(t);
   simTimers.delete(deviceId);
@@ -738,7 +764,8 @@ function stopSimulator(deviceId) {
       dev.lastUpdated = Date.now() - CONFIG.staleMs - 1000;
     }
   }
-  broadcast('devices', { devices: snapshot().devices });
+  // quiet: bulk operations (fleet clear) announce once at the end, not per device
+  if (!quiet) broadcast('devices', { devices: snapshot().devices });
 }
 
 // ---------------------------------------------------------------------------
@@ -757,13 +784,49 @@ function broadcast(event, data) {
   }
 }
 
+/* The per-tick stream carries only what moves. Identity fields (name, type,
+ * colours, route) arrive in the full snapshot and the client merges these
+ * partial updates over them — with a few hundred jeepneys on one route the
+ * difference is a third of the wire size on every single tick. */
+function locDevice(d) {
+  return {
+    id: d.id,
+    active: d.active,
+    status: d.status,
+    online: d.online,
+    tracking: d.tracking,
+    simulated: d.simulated,
+    position: d.position,
+    rawPosition: d.rawPosition,
+    speedKmh: d.speedKmh,
+    heading: d.heading,
+    accuracy: d.accuracy,
+    lastUpdated: d.lastUpdated,
+    ageMs: d.ageMs,
+    speedWindowSec: d.speedWindowSec,
+    speedReady: d.speedReady,
+    offRouteM: d.offRouteM,
+    offRoute: d.offRoute,
+    s: d.s,
+    routeTotalM: d.routeTotalM,
+    progressPct: d.progressPct,
+    landmark: d.landmark,
+    nextStop: d.nextStop,
+    distanceToNextStopM: d.distanceToNextStopM,
+    distanceToEndM: d.distanceToEndM,
+    etaSecToNextStop: d.etaSecToNextStop,
+    etaSecToEnd: d.etaSecToEnd,
+    arrived: d.arrived,
+  };
+}
+
 let locBroadcastAt = 0;
 function broadcastLocations(force) {
   const now = Date.now();
   if (!force && now - locBroadcastAt < 800) return; // keep the stream light
   locBroadcastAt = now;
   const s = snapshot(now);
-  broadcast('loc', { serverTime: now, devices: s.devices });
+  broadcast('loc', { serverTime: now, devices: s.devices.map(locDevice) });
 }
 
 function broadcastAll() {
@@ -840,13 +903,45 @@ function serveStatic(req, res, urlPath) {
       });
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': ext === '.woff2' ? 'public, max-age=604800' : 'no-cache',
+    // Every asset index.html references carries ?v=N, and N changes whenever a
+    // file changes, so those URLs never serve stale bytes: let browsers keep
+    // them forever instead of revalidating 14 files on every single load.
+    const versioned = req.url.includes('?v=');
+    const cacheControl = versioned
+      ? 'public, max-age=31536000, immutable'
+      : ext === '.woff2' ? 'public, max-age=604800' : 'no-cache';
+    const compressible = ext === '.js' || ext === '.css' || ext === '.svg' || ext === '.json' || ext === '.html';
+    const wantsGzip = compressible && /gzip/i.test(req.headers['accept-encoding'] || '');
+    const hit = assetCache.get(filePath);
+    const entry = hit && hit.mtimeMs === stat.mtimeMs ? hit : null;
+    if (entry) return sendAsset(res, entry, ext, cacheControl, wantsGzip);
+    fs.readFile(filePath, (err, raw) => {
+      if (err) return json(res, 404, { error: 'not found' });
+      const fresh = { mtimeMs: stat.mtimeMs, raw: raw, gz: compressible ? zlib.gzipSync(raw) : null };
+      if (assetCache.size > 40) assetCache.clear();
+      assetCache.set(filePath, fresh);
+      sendAsset(res, fresh, ext, cacheControl, wantsGzip);
     });
-    fs.createReadStream(filePath).pipe(res);
   });
 }
+
+/* Serve a cached asset buffer, gzipped when the client accepts it and the
+ * compressed form is actually smaller. Vary keeps shared caches honest. */
+function sendAsset(res, entry, ext, cacheControl, wantsGzip) {
+  const useGz = !!(wantsGzip && entry.gz && entry.gz.length < entry.raw.length);
+  const body = useGz ? entry.gz : entry.raw;
+  const head = {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': cacheControl,
+    'Content-Length': body.length,
+  };
+  if (entry.gz) head.Vary = 'Accept-Encoding';
+  if (useGz) head['Content-Encoding'] = 'gzip';
+  res.writeHead(200, head);
+  res.end(body);
+}
+
+const assetCache = new Map(); // filePath -> { mtimeMs, raw, gz }
 
 // ---------------------------------------------------------------------------
 // Route handlers
@@ -860,7 +955,6 @@ function validateRoute(body) {
   if (!body || typeof body !== 'object') { errors.push('A route object is required.'); return errors; }
   if (!body.name || !String(body.name).trim()) errors.push('Route name is required.');
   const stops = Array.isArray(body.stops) ? body.stops : [];
-  if (!stops.length) errors.push('Add at least one stop or landmark.');
   stops.forEach((s, i) => {
     // A null/short entry used to throw a TypeError inside the validator, which
     // surfaced as an HTTP 500 leaking internal text instead of a 422.
@@ -870,8 +964,11 @@ function validateRoute(body) {
     else if (!coordsOk(lat, lng)) errors.push(`Stop ${i + 1} is outside the map (latitude -90…90, longitude -180…180).`);
     if (!s.name || !String(s.name).trim()) errors.push(`Stop ${i + 1} needs a name.`);
   });
+  // A route is defined by its drawn line; named stops / landmarks are optional
+  // extras that give passengers "Near X" context. Start / end points are no longer
+  // a thing — routes are drawn freely and usually loop back on themselves.
   const path = Array.isArray(body.path) ? body.path : [];
-  if (!path.length) errors.push('The route needs at least one coordinate.');
+  if (path.length < 2) errors.push('Draw the route line — at least two points.');
   path.forEach((p, i) => {
     if (!p || typeof p !== 'object') { errors.push(`Path point ${i + 1} is not a coordinate.`); return; }
     const lat = num(p.lat), lng = num(p.lng);
@@ -897,21 +994,38 @@ function normaliseRoute(body, existing) {
     latitude: num(s.latitude),
     longitude: num(s.longitude),
     order: i + 1,
-    type: ['start', 'stop', 'landmark', 'endpoint'].includes(s.type) ? s.type : i === 0 ? 'start' : 'stop',
-  }));
+      type: ['stop', 'landmark'].includes(s.type) ? s.type : 'stop',
+    }));
   // filter, not just map: `+null` is 0, so an unfiltered map turns a blank point
   // into a real coordinate at (0,0) — the same trap the GPS ingest had.
   const validPoint = (p) => p && typeof p === 'object' && coordsOk(num(p.lat), num(p.lng));
   const path = (Array.isArray(body.path) ? body.path : []).filter(validPoint).map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
-  const corridor = (Array.isArray(body.corridor) ? body.corridor : []).filter(validPoint).map((p) => ({ lat: num(p.lat), lng: num(p.lng) }));
   const givenStart = body.startPoint && typeof body.startPoint === 'object' && coordsOk(num(body.startPoint.lat), num(body.startPoint.lng)) ? body.startPoint : null;
   const givenEnd = body.endPoint && typeof body.endPoint === 'object' && coordsOk(num(body.endPoint.lat), num(body.endPoint.lng)) ? body.endPoint : null;
-  const startPoint = givenStart || (stops.length ? { lat: stops[0].latitude, lng: stops[0].longitude, name: stops[0].name } : null);
-  const last = stops[stops.length - 1];
-  const endPoint = givenEnd || (last ? { lat: last.latitude, lng: last.longitude, name: last.name } : null);
+  // Start / end are no longer declared by the admin: they fall out of the drawn
+  // line's two ends, named after a stop that sits basically on top of them so a
+  // loop that begins and ends at the depot still reads sensibly.
+  const nearestStopName = (pt) => {
+    let best = null;
+    let bestD = 60;
+    stops.forEach((s) => {
+      // stops carry latitude/longitude, path points carry lat/lng — haversine
+      // only reads the short names, so hand it a point in its own shape.
+      const d = Geo.haversine({ lat: s.latitude, lng: s.longitude }, pt);
+      if (d < bestD) { bestD = d; best = s.name; }
+    });
+    return best;
+  };
+  const firstP = path[0];
+  const lastP = path[path.length - 1];
+  const startPoint = givenStart || (firstP ? { lat: firstP.lat, lng: firstP.lng, name: nearestStopName(firstP) } : null);
+  const endPoint = givenEnd || (lastP ? { lat: lastP.lat, lng: lastP.lng, name: nearestStopName(lastP) } : null);
   let distanceM = 0;
   for (let i = 1; i < path.length; i++) distanceM += Geo.haversine(path[i - 1], path[i]);
-  const isLoop = !!(startPoint && endPoint && Math.abs(startPoint.lat - endPoint.lat) < 1e-5 && Math.abs(startPoint.lng - endPoint.lng) < 1e-5);
+  // Routes are drawn freeform and almost always come back around, so a loop is
+  // detected from the two ends of the drawn line being close together (150 m —
+  // a hand-drawn loop never closes to the metre).
+  const isLoop = !!(startPoint && endPoint && Geo.haversine(startPoint, endPoint) <= 150);
   return {
     id: existing ? existing.id : body.id || slug('route'),
     name: String(body.name).trim(),
@@ -923,10 +1037,6 @@ function normaliseRoute(body, existing) {
     endPoint: endPoint,
     stops: stops,
     path: path,
-    // Whatever the body carries is the area — an empty list means "no shaded
-    // corridor". Keeping the old shape here made a drawn area impossible to
-    // clear or edit down (it came back on the next save).
-    corridor: corridor,
     distanceM: Math.round(distanceM),
     isLoop: isLoop,
     createdAt: existing ? existing.createdAt : new Date().toISOString(),
@@ -1106,6 +1216,64 @@ async function handleApi(req, res, urlPath, query) {
       persist();
       broadcastAll();
       return json(res, 200, { route: updated });
+    }
+    /* ------------------------------------------------- simulated fleet -----
+     * A route in real life carries hundreds of jeepneys, so the demo can drop
+     * a whole fleet of virtual ones onto the line at once — evenly spaced with
+     * a little jitter so they drive like traffic, not like a convoy — and take
+     * them all back off when the run is over. */
+    if (route[2] === 'fleet') {
+      const r = state.routes[idx];
+      const { prep } = prepFor(r);
+      if (!prep.totalM) return json(res, 422, { error: 'This route has no drawn line to drive on.' });
+      if (method === 'POST') {
+        const body = await readBody(req);
+        const count = Math.floor(num(body.count));
+        if (!isFinite(count) || count < 1) return json(res, 422, { error: 'How many jeepneys? Pick a number from 1 to 500.' });
+        if (count > 500) return json(res, 422, { error: 'Up to 500 jeepneys per drop.' });
+        if (state.deviceOrder.length + count > 2000) return json(res, 422, { error: 'That would put more than 2000 jeepneys on this server.' });
+        const made = [];
+        for (let i = 0; i < count; i++) {
+          const dev = {
+            ...normaliseDevice({ name: 'Sim ' + String(i + 1).padStart(3, '0') + ' · ' + r.name, type: 'Traditional', routeId: r.id }, null),
+            tracking: false,
+            simulated: false,
+            speedKmh: 0,
+            heading: 0,
+            lastFix: null,
+            smoothed: null,
+            s: 0,
+            lastUpdated: null,
+            simState: null,
+          };
+          state.devices[dev.id] = dev;
+          state.deviceOrder.push(dev.id);
+          state.locationHistory[dev.id] = [];
+          const frac = Math.min(0.999, (i + Math.random() * 0.6) / count);
+          startSimulator(dev.id, { seedS: frac });
+          made.push(dev.id);
+        }
+        persist();
+        broadcastAll();
+        return json(res, 201, { ok: true, created: made.length, devices: made });
+      }
+      if (method === 'DELETE') {
+        let removed = 0;
+        state.deviceOrder = state.deviceOrder.filter((did) => {
+          const d = state.devices[did];
+          if (d && d.routeId === r.id && d.simulated) {
+            stopSimulator(did, true);
+            delete state.devices[did];
+            delete state.locationHistory[did];
+            removed++;
+            return false;
+          }
+          return true;
+        });
+        persist();
+        broadcastAll();
+        return json(res, 200, { ok: true, removed: removed });
+      }
     }
     if (method === 'DELETE') {
       const removed = state.routes.splice(idx, 1)[0];

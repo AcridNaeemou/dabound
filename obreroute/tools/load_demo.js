@@ -54,7 +54,7 @@ async function api(method, p, body) {
   for (const r of demo.routes) {
     if (state.routes.some((x) => x.id === r.id)) continue;
     await api('POST', '/api/routes', {
-      id: r.id, name: r.name, color: r.color, stops: r.stops, path: r.path, corridor: r.corridor,
+      id: r.id, name: r.name, color: r.color, stops: r.stops, path: r.path,
     });
   }
   for (const d of demo.devices) {

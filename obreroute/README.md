@@ -302,7 +302,6 @@ own captures of the three new behaviours.
 
 Requires `playwright` (dev-only): `npm i playwright && npx playwright install chromium`.
 `tools/build_seed.js` regenerates `data/seed.json` with fresh OSRM road geometry (needs internet);
-`tools/add_corridors.js` writes the ~110 m corridor polygon for every seeded route into `data/seed.json`.
 
 ---
 

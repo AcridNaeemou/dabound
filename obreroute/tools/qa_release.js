@@ -85,9 +85,9 @@ const PATH = (() => {
   return out;
 })();
 const STOPS = [
-  { name: 'USeP Obrero', latitude: 7.085773, longitude: 125.616083, order: 1, type: 'start' },
+  { name: 'USeP Obrero', latitude: 7.085773, longitude: 125.616083, order: 1, type: 'stop' },
   { name: 'Victoria Plaza', latitude: 7.086623, longitude: 125.611763, order: 2, type: 'stop' },
-  { name: 'Bajada Flyover', latitude: 7.095171, longitude: 125.615267, order: 3, type: 'end' },
+  { name: 'Bajada Flyover', latitude: 7.095171, longitude: 125.615267, order: 3, type: 'landmark' },
 ];
 
 /* the loop the admin draws: a closed square (start == end) */
@@ -124,7 +124,7 @@ async function sendFix(id, point, opts) {
   });
 }
 
-const QA = { route: 'QA Obrero - Bajada', device: 'QA Jeepney 01', route2: 'QA Route Two', loop: 'QA Loop Route', persistRoute: 'QA Persist Route', persistDevice: 'QA Persist Jeepney', loopDevice: 'QA Loop Jeepney' };
+const QA = { route: 'QA Obrero - Bajada', device: 'QA Jeepney 01', route2: 'QA Route Two', loop: 'QA Loop Route', persistRoute: 'QA Persist Route', persistDevice: 'QA Persist Jeepney', loopDevice: 'QA Loop Jeepney', bare: 'QA Bare Line', bareLoop: 'QA Bare Loop' };
 
 async function cleanup() {
   const s = await state();
@@ -175,16 +175,38 @@ function assertSane(where, d) {
   ok('nothing is reported online without telemetry', s.devices.length === 0);
 
   console.log('\n── admin draws a route (§6, §8, §20, §21) ──');
-  const created = await api('/api/routes', 'POST', {
-    name: QA.route, stops: STOPS, path: PATH,
-    startPoint: { lat: PATH[0].lat, lng: PATH[0].lng, name: 'USeP Obrero' },
-    endPoint: { lat: PATH[PATH.length - 1].lat, lng: PATH[PATH.length - 1].lng, name: 'Bajada Flyover' },
-  });
+  const created = await api('/api/routes', 'POST', { name: QA.route, stops: STOPS, path: PATH });
   ok('the route is created', created.status === 201, 'HTTP ' + created.status);
   const R1 = created.body.route;
   const drawn = pathLength(PATH);
   ok('stops are stored with name, coordinates and order', R1.stops.length === 3 && R1.stops[1].name === 'Victoria Plaza' && isFinite(R1.stops[1].latitude) && R1.stops[1].order === 2);
   ok('the distance matches the road that was drawn (not invented)', Math.abs(R1.distanceM - drawn) / drawn < 0.03, `${R1.distanceM} m vs ${Math.round(drawn)} m drawn`);
+  const sN = R1.startPoint || {};
+  const eN = R1.endPoint || {};
+  ok('start/end fall out of the drawn line instead of being declared',
+    Math.abs((sN.lat ?? NaN) - PATH[0].lat) < 1e-6 && Math.abs((eN.lat ?? NaN) - PATH[PATH.length - 1].lat) < 1e-6,
+    `${sN.lat},${sN.lng} → ${eN.lat},${eN.lng}`);
+  ok('the derived ends are named after the nearest stop',
+    sN.name === 'USeP Obrero' && eN.name === 'Bajada Flyover', `${sN.name} → ${eN.name}`);
+
+  console.log('\n── freeform route: a drawn line needs no stops at all ──');
+  const bareRes = await api('/api/routes', 'POST', { name: QA.bare, path: PATH });
+  ok('a bare drawn line is a valid route', bareRes.status === 201, 'HTTP ' + bareRes.status);
+  const BARE = bareRes.body.route || {};
+  ok('…it stores zero stops', (BARE.stops || []).length === 0, (BARE.stops || []).length + ' stops');
+  ok('…its ends stay unnamed when no stop sits on them',
+    (BARE.startPoint || {}).name === null && (BARE.endPoint || {}).name === null,
+    `${(BARE.startPoint || {}).name} → ${(BARE.endPoint || {}).name}`);
+  ok('…and it is not called a loop when the ends are apart', BARE.isLoop === false, 'isLoop=' + BARE.isLoop);
+  const noPathRes = await api('/api/routes', 'POST', { name: QA.bare + ' 2', path: [{ lat: 7.09, lng: 125.61 }] });
+  ok('a line shorter than two points is rejected', noPathRes.status === 422,
+    'HTTP ' + noPathRes.status + ' ' + JSON.stringify((noPathRes.body || {}).errors || ''));
+  const closedRes = await api('/api/routes', 'POST', { name: QA.bareLoop, path: LOOP_PATH });
+  ok('a closed drawn line counts as a loop with no stops at all',
+    closedRes.status === 201 && closedRes.body.route.isLoop === true,
+    'isLoop=' + ((closedRes.body.route || {}).isLoop));
+  await api('/api/routes/' + ((closedRes.body.route || {}).id || 'x'), 'DELETE');
+  await api('/api/routes/' + (BARE.id || 'x'), 'DELETE');
 
   s = await state();
   ok('the route reaches the shared state every screen reads', s.routes.some((r) => r.id === R1.id));
@@ -281,7 +303,7 @@ function assertSane(where, d) {
   await api('/api/devices/' + D1.id, 'PATCH', { routeId: R1.id });
 
   console.log('\n── loop route: the wrap stays honest (§15, §18) ──');
-  const loopRes = await api('/api/routes', 'POST', { name: QA.loop, stops: [{ name: 'Loop Start', latitude: LOOP_PATH[0].lat, longitude: LOOP_PATH[0].lng, order: 1, type: 'start' }], path: LOOP_PATH, isLoop: true });
+  const loopRes = await api('/api/routes', 'POST', { name: QA.loop, stops: [{ name: 'Loop Start', latitude: LOOP_PATH[0].lat, longitude: LOOP_PATH[0].lng, order: 1, type: 'stop' }], path: LOOP_PATH, isLoop: true });
   const LOOP = loopRes.body.route;
   ok('a loop route (start = end) is accepted', loopRes.status === 201 && LOOP.isLoop === true);
   const loopDev = (await api('/api/devices', 'POST', { name: QA.loopDevice, routeId: LOOP.id, type: 'Modern' })).body.device;

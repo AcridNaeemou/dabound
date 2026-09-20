@@ -148,8 +148,6 @@
   }
 
   function stopIcon(type) {
-    if (type === 'start') return L.divIcon({ className: 'mk', html: '<div class="mk-start">S</div>', iconSize: [26, 26], iconAnchor: [13, 13] });
-    if (type === 'endpoint') return L.divIcon({ className: 'mk', html: '<div class="mk-end">E</div>', iconSize: [26, 26], iconAnchor: [13, 13] });
     if (type === 'landmark') return L.divIcon({ className: 'mk', html: '<div class="mk-landmark"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
     return L.divIcon({ className: 'mk', html: '<div class="mk-stop"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
   }
@@ -201,7 +199,6 @@
     });
     L.tileLayer(TILE, { maxZoom: 19, attribution: ATTR, detectRetina: true }).addTo(map);
 
-    var corridorLayer = L.layerGroup().addTo(map);
     var routeLayer = L.layerGroup().addTo(map);
     var stopLayer = L.layerGroup().addTo(map);
     var deviceLayer = L.layerGroup().addTo(map);
@@ -267,44 +264,6 @@
 
       clearRoute: function () { routeLayer.clearLayers(); stopLayer.clearLayers(); },
 
-      /**
-       * Route corridor polygon (spec 40-44): translucent navy area + navy boundary,
-       * yellow draggable handles while the admin is editing it.
-       */
-      drawCorridor: function (points, o) {
-        o = o || {};
-        corridorLayer.clearLayers();
-        if (!points || points.length < 3) {
-          if (points && points.length === 2) {
-            L.polyline(points.map(function (p) { return [p.lat, p.lng]; }), { color: NAVY, weight: 2, dashArray: '6 6', opacity: .8 }).addTo(corridorLayer);
-          }
-          return;
-        }
-        var latlngs = points.map(function (p) { return [p.lat, p.lng]; });
-        L.polygon(latlngs, {
-          color: o.color || NAVY,
-          weight: o.weight || 2,
-          opacity: o.dim ? 0.4 : 0.85,
-          fillColor: o.fillColor || NAVY,
-          fillOpacity: o.dim ? 0.06 : 0.14,
-          interactive: false,
-        }).addTo(corridorLayer);
-        if (o.handles) {
-          points.forEach(function (pt, i) {
-            var m = L.marker([pt.lat, pt.lng], {
-              icon: L.divIcon({ className: 'mk', html: '<div class="mk-corner"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
-              draggable: true,
-              zIndexOffset: 700,
-            });
-            m.bindTooltip('Area point ' + (i + 1), { direction: 'top', offset: [0, -10] });
-            if (o.onDragEnd) m.on('dragend', function () { o.onDragEnd(i, m.getLatLng()); });
-            if (o.onMarkerTap) m.on('click', function () { o.onMarkerTap(m.getLatLng()); });
-            m.addTo(corridorLayer);
-          });
-        }
-      },
-
-      clearCorridor: function () { corridorLayer.clearLayers(); },
 
       /** Add/replace a jeepney marker; animates to the new position */
       upsertDevice: function (device, o) {
@@ -316,12 +275,26 @@
           return;
         }
         if (existing) {
-          existing.setIcon(jeepIcon(device, o.selected));
+          /* A live map can carry hundreds of jeepneys; replacing the DOM icon
+           * (heading rotation, status colour) for every marker on every tick
+           * is exactly what makes a browser jank. The icon only truly changes
+           * when status, selection or heading bucket changes — skip otherwise. */
+          var key = device.status + '|' + (o.selected ? 1 : 0) + '|' + Math.round((device.heading || 0) / 15);
+          if (existing.__iconKey !== key) {
+            existing.setIcon(jeepIcon(device, o.selected));
+            existing.__iconKey = key;
+          }
           tweenTo(existing, pos, 900);
-          if (existing.getTooltip()) existing.setTooltipContent(tooltipFor(device));
+          var tip = tooltipFor(device);
+          if (existing.__tip !== tip) {
+            existing.setTooltipContent(tip);
+            existing.__tip = tip;
+          }
         } else {
           var m = L.marker([pos.lat, pos.lng], { icon: jeepIcon(device, o.selected), zIndexOffset: o.selected ? 600 : 300, title: device.name });
-          m.bindTooltip(tooltipFor(device), { direction: 'top', offset: [0, -20] });
+          m.__iconKey = device.status + '|' + (o.selected ? 1 : 0) + '|' + Math.round((device.heading || 0) / 15);
+          m.__tip = tooltipFor(device);
+          m.bindTooltip(m.__tip, { direction: 'top', offset: [0, -20] });
           m.on('click', function () { if (o.onClick) o.onClick(device.id); });
           m.addTo(deviceLayer);
           markers[device.id] = m;
@@ -422,7 +395,7 @@
         }
         (points || []).forEach(function (p, i) {
           var icon =
-            p.type === 'start' ? stopIcon('start') : p.type === 'endpoint' ? stopIcon('endpoint') : p.type === 'landmark' ? stopIcon('landmark') : stopIcon('stop');
+            p.type === 'landmark' ? stopIcon('landmark') : stopIcon('stop');
           var m = L.marker([p.lat, p.lng], { icon: icon, draggable: true, zIndexOffset: 400 });
           m.bindTooltip((i + 1) + '. ' + (p.name || p.type), { direction: 'top', offset: [0, -12] });
           if (activePoint && activePoint.onDragEnd) m.on('dragend', function () { activePoint.onDragEnd(i, m.getLatLng()); });

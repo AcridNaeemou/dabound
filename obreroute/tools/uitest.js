@@ -229,46 +229,94 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.mouse.click(b.x + b.width * fx, b.y + b.height * fy);
     await sleep(500);
   };
-  await page.locator('[data-mode="start"]').click();
-  await tap(0.2, 0.3);
+  /* Routes are drawn freeform now: a stroke on the map IS the route. */
+  const stroke = async (from, to, steps) => {
+    await page.locator('#re-map').scrollIntoViewIfNeeded();
+    await sleep(150);
+    const b = await page.locator('#re-map').boundingBox();
+    const n = steps || 14;
+    await page.mouse.move(b.x + b.width * from[0], b.y + b.height * from[1]);
+    await page.mouse.down();
+    for (let i = 1; i <= n; i++) {
+      await page.mouse.move(
+        b.x + b.width * (from[0] + ((to[0] - from[0]) * i) / n),
+        b.y + b.height * (from[1] + ((to[1] - from[1]) * i) / n));
+      await sleep(25);
+    }
+    await page.mouse.up();
+    await sleep(700);
+  };
+  const nodes = async () => {
+    const t = await page.locator('text=/path nodes/').first().textContent().catch(() => '');
+    const m = /(\d+)\s+path nodes/.exec(t || '');
+    return m ? parseInt(m[1], 10) : 0;
+  };
+
+  ok('Editor exposes Draw / Edit / Erase / Stop tools',
+    (await page.locator('[data-mode="draw"]').count()) === 1 &&
+    (await page.locator('[data-mode="edit"]').count()) === 1 &&
+    (await page.locator('[data-mode="erase"]').count()) === 1 &&
+    (await page.locator('[data-mode="stop"]').count()) === 1);
+  ok('Start, endpoint and area tools are gone',
+    (await page.locator('[data-mode="start"]').count()) === 0 &&
+    (await page.locator('[data-mode="endpoint"]').count()) === 0 &&
+    (await page.locator('[data-mode="area"]').count()) === 0);
+
+  await page.locator('[data-mode="draw"]').click();
+  await stroke([0.18, 0.3], [0.6, 0.48]);
+  const n1 = await nodes();
+  ok('Draw Route records a freehand stroke', n1 >= 2, n1 + ' path nodes');
+  await stroke([0.6, 0.48], [0.8, 0.72]);
+  const n2 = await nodes();
+  ok('A second stroke extends the same line', n2 > n1, n1 + ' → ' + n2 + ' path nodes');
+  await shot('admin-route-editor-points');
+
+  console.log('\n── admin: undo / redo on the drawn line ───────────');
+  await page.locator('[data-act="undo"]').click();
+  await sleep(700);
+  const afterUndo = await nodes();
+  ok('Undo steps back one stroke', afterUndo === n1, afterUndo + ' vs ' + n1);
+  await page.locator('[data-act="redo"]').click();
+  await sleep(700);
+  const afterRedo = await nodes();
+  ok('Redo puts it back', afterRedo === n2, afterRedo + ' vs ' + n2);
+
+  // stops are optional context now — nothing to declare before adding one
   await page.locator('[data-mode="stop"]').click();
-  await tap(0.5, 0.55);
+  await tap(0.45, 0.4);
   await sleep(400);
   await page.fill('#pn-input', 'UITest Landmark');
   await page.locator('.scrim [data-act="ok"]').click();
-  await sleep(400);
-  await page.locator('[data-mode="endpoint"]').click();
-  await tap(0.8, 0.75);
-  await shot('admin-route-editor-points');
+  await sleep(500);
   const pointRows = await page.locator('.step-row[data-point]').count();
-  ok('Editor collects start, stop and endpoint', pointRows === 3, pointRows + ' points');
-  ok('Stop name is captured from the dialog', (await page.locator('input[data-name="1"]').inputValue()) === 'UITest Landmark');
+  ok('A stop can be added without declaring start/end', pointRows === 1, pointRows + ' stop rows');
+  ok('Stop name is captured from the dialog', (await page.locator('input[data-name="0"]').inputValue()) === 'UITest Landmark');
+  ok('Stop rows offer Stop / Landmark only', (await page.locator('.step-row select[data-type="0"] option').count()) === 2);
 
-  await page.locator('[data-act="generate"]').click();
-  await sleep(7000); // OSRM round trip via the backend proxy
-  const pathNodes = await page.locator('text=/path nodes/').first().textContent();
-  ok('Generate Path builds a driving path', /[1-9]\d*\s*\/?\s*\d*\s*path nodes|[1-9]\d+ path nodes/.test(pathNodes || ''), (pathNodes || '').trim());
-
-  console.log('\n── admin: route area (corridor) + undo (spec 41-44, 87) ──');
-  ok('Editor exposes a Draw Area tool', (await page.locator('[data-mode="area"]').count()) === 1);
-  await page.locator('[data-mode="area"]').click();
-  await tap(0.24, 0.3);
-  await tap(0.72, 0.32);
-  await tap(0.5, 0.62);
-  await shot('admin-route-area');
-  const areaText = await page.locator('.area-row').innerText().catch(() => '');
-  ok('Route area lists its corner points', /3 corner points/.test(areaText), areaText.replace(/\n/g, ' | '));
-  ok('Corridor corner handles are draggable markers', (await page.locator('.mk-corner').count()) >= 3);
-  await page.locator('[data-act="undo"]').click();
-  await sleep(500);
-  const afterUndo = await page.locator('.area-row').innerText().catch(() => '');
-  ok('Undo steps back one area point', /2 corner points/.test(afterUndo), afterUndo.replace(/\n/g, ' | '));
-  await page.locator('[data-act="redo"]').click();
-  await sleep(500);
-  ok('Redo puts it back', /3 corner points/.test(await page.locator('.area-row').innerText().catch(() => '')));
+  console.log('\n── admin: stabilize route (snap the line to roads) ─');
+  ok('Stabilize Route replaces Generate Path',
+    (await page.locator('[data-act="stabilize"]').count()) === 1 &&
+    (await page.locator('[data-act="generate"]').count()) === 0);
+  await page.evaluate(() => {
+    window.__toasts = [];
+    const host = document.getElementById('toasts');
+    new MutationObserver(() => {
+      host.querySelectorAll('.toast span').forEach((s) => {
+        if (window.__toasts.indexOf(s.textContent) < 0) window.__toasts.push(s.textContent);
+      });
+    }).observe(host, { childList: true, subtree: true });
+  });
+  await page.locator('[data-act="stabilize"]').click();
+  await sleep(9000); // OSRM round trip via the backend proxy
+  const stabilized = await nodes();
+  ok('Stabilize Route leaves a usable road line', stabilized >= 2, stabilized + ' path nodes');
+  const toasts = await page.evaluate(() => window.__toasts || []);
+  ok('Stabilize Route reports what it did',
+    toasts.some((t) => /stabiliz|road routing|straight-line/i.test(t)), toasts.join(' | ') || 'no toast');
+  await shot('admin-route-stabilized');
 
   await page.locator('[data-act="save"]').click();
-  await sleep(1600);
+  await sleep(1800);
   await page.goto(BASE + '/#/admin-routes', { waitUntil: 'domcontentloaded' });
   await sleep(1000);
   const created = await page.locator('[data-route]', { hasText: 'UITest Route' }).count();
@@ -277,8 +325,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const st = await (await fetch('/api/state')).json();
     return st.routes.find((r) => r.name === 'UITest Route') || null;
   });
-  ok('Saved route keeps its corridor polygon', !!savedRoute && (savedRoute.corridor || []).length === 3,
-    savedRoute ? 'corridor=' + (savedRoute.corridor || []).length : 'route missing');
+  ok('Saved route keeps the drawn path', !!savedRoute && (savedRoute.path || []).length >= 2,
+    savedRoute ? 'path=' + (savedRoute.path || []).length : 'route missing');
+  ok('Saved stops are stop/landmark only (no start/endpoint)',
+    !!savedRoute && (savedRoute.stops || []).length === 1 &&
+    (savedRoute.stops || []).every((s) => s.type === 'stop' || s.type === 'landmark'),
+    savedRoute ? JSON.stringify((savedRoute.stops || []).map((s) => s.type)) : 'route missing');
+  ok('No corridor polygon is stored any more', !!savedRoute && savedRoute.corridor === undefined,
+    savedRoute ? 'corridor=' + JSON.stringify(savedRoute.corridor) : 'route missing');
 
   console.log('\n── admin: unsaved-changes guard (spec 89) ─────────');
   await page.goto(BASE + '/#/admin-route-editor/' + (savedRoute ? savedRoute.id : ''), { waitUntil: 'domcontentloaded' });
@@ -299,8 +353,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const r = await post('/api/routes', {
       name: 'UITest Delete Me',
       stops: [
-        { name: 'Alpha', latitude: 7.071, longitude: 125.611, type: 'start' },
-        { name: 'Omega', latitude: 7.081, longitude: 125.621, type: 'endpoint' },
+        { name: 'Alpha', latitude: 7.071, longitude: 125.611, type: 'stop' },
+        { name: 'Omega', latitude: 7.081, longitude: 125.621, type: 'landmark' },
       ],
       path: [{ lat: 7.071, lng: 125.611 }, { lat: 7.081, lng: 125.621 }],
     });

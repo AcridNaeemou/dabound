@@ -53,6 +53,8 @@
     setTracking: (id, on) => req('POST', '/api/devices/' + id + '/tracking', { on: on }),
     setSimulate: (id, on, seedS) => req('POST', '/api/devices/' + id + '/simulate', { on: on, seedS: seedS }),
     placeDevice: (id, frac) => req('POST', '/api/devices/' + id + '/place', { frac: frac }),
+    addFleet: (routeId, count) => req('POST', '/api/routes/' + routeId + '/fleet', { count: count }),
+    clearFleet: (routeId) => req('DELETE', '/api/routes/' + routeId + '/fleet'),
 
     destinations: () => req('GET', '/api/destinations'),
     createDestination: (d) => req('POST', '/api/destinations', d),

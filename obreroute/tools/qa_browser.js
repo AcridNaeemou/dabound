@@ -41,9 +41,9 @@ const ROUTE = {
   name: 'QA Browser Obrero',
   color: '#2D6CDF',
   stops: [
-    { name: 'USeP Obrero', latitude: 7.085773, longitude: 125.616083, type: 'start' },
+    { name: 'USeP Obrero', latitude: 7.085773, longitude: 125.616083, type: 'stop' },
     { name: 'Victoria Plaza', latitude: 7.086623, longitude: 125.611763, type: 'stop' },
-    { name: 'Bajada Flyover', latitude: 7.095171, longitude: 125.615267, type: 'endpoint' },
+    { name: 'Bajada Flyover', latitude: 7.095171, longitude: 125.615267, type: 'landmark' },
   ],
   path: [
     { lat: 7.085773, lng: 125.616083 },
@@ -51,13 +51,6 @@ const ROUTE = {
     { lat: 7.086623, lng: 125.611763 },
     { lat: 7.090100, lng: 125.613200 },
     { lat: 7.095171, lng: 125.615267 },
-  ],
-  // the shaded route area the admin draws with "Draw Area" (spec 49)
-  corridor: [
-    { lat: 7.085300, lng: 125.616400 },
-    { lat: 7.086800, lng: 125.611300 },
-    { lat: 7.090500, lng: 125.612800 },
-    { lat: 7.095600, lng: 125.615700 },
   ],
 };
 const DEV = 'qb-dev';
@@ -409,64 +402,147 @@ async function deviceState() {
     await page.screenshot({ path: require('path').join(__dirname, '..', 'screenshots', 'uit-drawn-route.png') });
   }
 
-  /* ------------------------------------------------- corridor underlay ---- */
-  console.log('\n\u2500\u2500 the drawn route area is really shaded (spec 49) \u2500\u2500');
+  /* ------------------------------------------- stabilize route (roads) ---- */
+  console.log('\n\u2500\u2500 stabilize route snaps the drawn line onto roads \u2500\u2500');
   {
-    // Vector layers live on a canvas (mapkit sets preferCanvas), so the honest
-    // check is pixels: how much faint ink the overlay canvas carries. A shaded
-    // corridor adds thousands of low-alpha pixels, a bare route line a few hundred.
-    const overlayInk = (sel) => page.evaluate((s) => {
-      const c = document.querySelector(s + ' .leaflet-overlay-pane canvas');
-      if (!c) return -1;
-      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-      let faint = 0;
-      for (let i = 3; i < d.length; i += 4) if (d[i] && d[i] <= 50) faint++;
-      return faint;
-    }, sel);
-
-    // 1. a route whose area was removed must not come back (no ghost shape)
-    const bare = { ...ROUTE };
-    delete bare.corridor;
-    await api('POST', '/api/routes', bare);
-    const storedBare = (await api('GET', '/api/routes')).routes.find((r) => r.id === ROUTE.id) || {};
-    ok('Clearing a drawn area sticks (no ghost shape comes back)',
-      (storedBare.corridor || []).length === 0, `${(storedBare.corridor || []).length} corner points stored`);
-
-    await page.goto(BASE + '/#/admin-live', { waitUntil: 'load' });
-    await page.waitForTimeout(3000);
-    const inkBare = await overlayInk('#alm-map');
-
-    // 2. the editor on a route with no area: tap the corners and watch it paint
-    await page.goto(BASE + '/#/admin-route-editor/' + ROUTE.id, { waitUntil: 'load' });
-    await page.waitForTimeout(2600);
-    await page.click('[data-mode="area"]');
-    await page.waitForTimeout(300);
-    const inkBefore = await overlayInk('#re-map');
-    const box = await page.locator('#re-map').boundingBox();
-    let corners = 0;
-    for (const [fx, fy] of [[0.22, 0.28], [0.72, 0.34], [0.48, 0.72], [0.34, 0.58], [0.6, 0.2]]) {
-      if (corners >= 3) break;
-      await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
-      await page.waitForTimeout(420);
-      const t = (await page.locator('#re-panel').innerText()).replace(/\s+/g, ' ');
-      corners = +((t.match(/(\d+) corner point/) || [])[1] || 0);
-    }
-    await page.waitForTimeout(800);
-    const summary = (await page.locator('#re-panel').innerText()).replace(/\s+/g, ' ');
-    const inkAfter = await overlayInk('#re-map');
-    ok('Three taps close a route area', corners >= 3 && /corner point/.test(summary), `${corners} corner points · ${summary.slice(0, 60)}`);
-    ok('The corridor is shaded on the editor map, not just stored',
-      inkAfter > inkBefore + 400, `${inkAfter}px vs ${inkBefore}px of faint overlay ink`);
-    await page.screenshot({ path: require('path').join(__dirname, '..', 'screenshots', 'uit-corridor.png') });
-
-    // 3. once the route really has an area, the live map shows it under the jeepneys
+    // the drawn-area / corridor shape is gone from the model entirely
     await api('POST', '/api/routes', ROUTE);
-    await page.goto(BASE + '/#/admin-live', { waitUntil: 'load' });
-    await page.waitForTimeout(3000);
-    const inkShaded = await overlayInk('#alm-map');
-    ok('The live map shades the corridor under the jeepneys',
-      inkShaded > 1200 && inkShaded > inkBare + 800,
-      `shaded=${inkShaded}px vs bare=${inkBare}px of faint overlay ink`);
+    const stored = (await api('GET', '/api/routes')).routes.find((r) => r.id === ROUTE.id) || {};
+    ok('Routes no longer carry a drawn-area polygon', stored.corridor === undefined,
+      'corridor=' + JSON.stringify(stored.corridor));
+    ok('Stops are plain stop/landmark now (no start/endpoint)',
+      (stored.stops || []).length === 3 &&
+      (stored.stops || []).every((s) => s.type === 'stop' || s.type === 'landmark'),
+      JSON.stringify((stored.stops || []).map((s) => s.type)));
+
+    await page.goto(BASE + '/#/admin-route-editor/' + ROUTE.id, { waitUntil: 'load' });
+    await page.waitForTimeout(2800);
+    ok('The editor offers Stabilize Route instead of Generate Path',
+      (await page.locator('[data-act="stabilize"]').count()) === 1 &&
+      (await page.locator('[data-act="generate"]').count()) === 0);
+    ok('Start / endpoint / area tools are gone from the toolbar',
+      (await page.locator('[data-mode="start"], [data-mode="endpoint"], [data-mode="area"]').count()) === 0);
+
+    const nodes = async () => {
+      const t = (await page.locator('#re-panel').innerText()).replace(/\s+/g, ' ');
+      return +((t.match(/(\d+) path nodes/) || [])[1] || 0);
+    };
+    const before = await nodes();
+    await page.evaluate(() => {
+      window.__toasts = [];
+      const host = document.getElementById('toasts');
+      new MutationObserver(() => host.querySelectorAll('.toast span').forEach((s) => {
+        if (window.__toasts.indexOf(s.textContent) < 0) window.__toasts.push(s.textContent);
+      })).observe(host, { childList: true, subtree: true });
+    });
+    await page.evaluate(() => document.querySelector('[data-act="stabilize"]').click());
+    await page.waitForTimeout(9000); // OSRM round trip through the backend proxy
+    const after = await nodes();
+    const toasts = await page.evaluate(() => window.__toasts || []);
+    ok('Stabilize Route leaves a road-following line', after >= 2, before + ' → ' + after + ' path nodes');
+    ok('Stabilize Route says what it did',
+      toasts.some((t) => /stabiliz|road routing|straight-line/i.test(t)), toasts.join(' | ') || 'no toast');
+    await page.screenshot({ path: require('path').join(__dirname, '..', 'screenshots', 'uit-stabilize.png') });
+  }
+
+  /* -------------------- stabilize must protect the drawing when offline ---- */
+  console.log('\n\u2500\u2500 stabilize route protects the drawing when routing is offline \u2500\u2500');
+  {
+    await page.goto(BASE + '/#/admin-route-editor', { waitUntil: 'load' });
+    await page.waitForTimeout(2600);
+    await page.evaluate(() => document.querySelector('[data-mode="draw"]').click());
+    await page.waitForTimeout(300);
+    const box = await page.locator('#re-map').boundingBox();
+    const y = box.y + box.height * 0.5;
+    await page.mouse.move(box.x + box.width * 0.2, y);
+    await page.mouse.down();
+    for (let i = 1; i <= 20; i++) {
+      await page.mouse.move(box.x + box.width * (0.2 + 0.03 * i), y + Math.sin(i / 2) * 30);
+      await page.waitForTimeout(25);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(800);
+    const nodes = async () => {
+      const t = (await page.locator('#re-panel').innerText()).replace(/\s+/g, ' ');
+      return +((t.match(/(\d+) path nodes/) || [])[1] || 0);
+    };
+    const drawn = await nodes();
+    await page.evaluate(() => {
+      window.__toasts = [];
+      const h = document.getElementById('toasts');
+      new MutationObserver(() => h.querySelectorAll('.toast span').forEach((s) => {
+        if (window.__toasts.indexOf(s.textContent) < 0) window.__toasts.push(s.textContent);
+      })).observe(h, { childList: true, subtree: true });
+    });
+
+    // 1. the endpoint answers with its straight-line fallback: line must survive
+    await page.route('**/api/road-route', (r) => r.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ source: 'straight', path: [{ lat: 7.09, lng: 125.61 }, { lat: 7.091, lng: 125.611 }], distanceM: 100, points: 2 }),
+    }));
+    await page.evaluate(() => document.querySelector('[data-act="stabilize"]').click());
+    await page.waitForTimeout(1200);
+    const afterOffline = await nodes();
+    const t1 = await page.evaluate(() => window.__toasts || []);
+    ok('Offline routing leaves the drawn line untouched', afterOffline === drawn, drawn + ' → ' + afterOffline + ' path nodes');
+    ok('…and says honestly that routing is offline',
+      t1.some((t) => /road routing offline|road routing unavailable/i.test(t)), t1.join(' | ') || 'no toast');
+    await page.evaluate(() => document.querySelector('[data-act="undo"]').click());
+    await page.waitForTimeout(600);
+    const undone = await nodes();
+    ok('A failed stabilize does not pollute undo', undone < drawn, undone + ' after undo vs ' + drawn);
+    await page.evaluate(() => document.querySelector('[data-act="redo"]').click());
+    await page.waitForTimeout(600);
+    ok('…and redo still restores the drawing', (await nodes()) === drawn, (await nodes()) + ' vs ' + drawn);
+
+    // 2. real road geometry comes back: the drawn line is replaced by it
+    const road = [];
+    for (let i = 0; i <= 40; i++) road.push({ lat: +(7.085 + i * 0.0002).toFixed(6), lng: +(125.61 + i * 0.0001).toFixed(6) });
+    await page.route('**/api/road-route', (r) => r.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ source: 'osrm', path: road, distanceM: 5000, points: road.length }),
+    }));
+    await page.evaluate(() => document.querySelector('[data-act="stabilize"]').click());
+    await page.waitForTimeout(1200);
+    const afterOnline = await nodes();
+    const t2 = await page.evaluate(() => window.__toasts || []);
+    ok('Real road geometry replaces the drawn line', afterOnline === road.length,
+      afterOnline + ' vs ' + road.length + ' mocked road points');
+    ok('…and reports the snap', t2.some((t) => /stabilized onto real roads/i.test(t)), t2.join(' | ') || 'no toast');
+    await page.unroute('**/api/road-route');
+  }
+
+  /* ---------------------------------------------- simulated fleet from UI -- */
+  console.log('\n\u2500\u2500 the admin can drop a whole simulated fleet at once \u2500\u2500');
+  {
+    await page.goto(BASE + '/#/admin-route-detail/' + ROUTE.id, { waitUntil: 'load' });
+    await page.waitForTimeout(2200);
+    ok('Route detail offers the fleet controls',
+      (await page.locator('#ard-fleet-count').count()) === 1 &&
+      (await page.locator('[data-act="fleet-add"]').count()) === 1 &&
+      (await page.locator('[data-act="fleet-clear"]').count()) === 1);
+    await page.fill('#ard-fleet-count', '6');
+    await page.evaluate(() => document.querySelector('[data-act="fleet-add"]').click());
+    await page.waitForTimeout(2500);
+    const fleet = await page.evaluate(async (rid) => {
+      const st = await (await fetch('/api/state')).json();
+      return st.devices.filter((d) => d.routeId === rid && d.simulated);
+    }, ROUTE.id);
+    ok('Dropping a fleet creates that many simulated jeepneys', fleet.length === 6, fleet.length + ' simulated');
+    ok('…spaced along the line, not stacked', (() => {
+      const ss = fleet.map((d) => d.s || 0).sort((a, b) => a - b);
+      let gap = Infinity;
+      for (let i = 1; i < ss.length; i++) gap = Math.min(gap, ss[i] - ss[i - 1]);
+      return gap > 1;
+    })(), 'smallest gap from ' + fleet.length + ' jeepneys');
+    ok('…and the admin hears about it', /Dropped 6 virtual jeepneys/.test(await page.locator('.toast').last().innerText().catch(() => '')));
+    await page.evaluate(() => document.querySelector('[data-act="fleet-clear"]').click());
+    await page.waitForTimeout(2000);
+    const left = await page.evaluate(async (rid) => {
+      const st = await (await fetch('/api/state')).json();
+      return st.devices.filter((d) => d.routeId === rid && d.simulated).length;
+    }, ROUTE.id);
+    ok('Taking the fleet off removes exactly the simulated ones', left === 0, left + ' left');
   }
 
   /* --------------------------------------------------------- viewports ------ */

@@ -985,13 +985,24 @@
     var el = DOM.el('<div class="screen plain"></div>');
     var kit = null;
 
+    /* A busy route can carry hundreds of live jeepneys; rebuilding every card
+     * on each telemetry tick would jank the phone for rows nobody can read.
+     * Show the nearest dozen (the list is sorted for riders) and count the rest. */
+    var DEVICE_CARD_CAP = 12;
     function paintDevices(route) {
       var host = DOM.qs(el, '#rd-devices');
       if (!host) return;
       var devices = Store.devices({ routeId: route.id, activeOnly: true });
-      host.innerHTML = devices.length
-        ? devices.map(function (d) { return UI.jeepCard(d, { destination: Store.session.destination }); }).join('')
-        : UI.emptyState(window.Icons.jeep(26), 'No active jeepneys on this route.', 'Tracking appears here when a device starts sending GPS.');
+      if (!devices.length) {
+        host.innerHTML = UI.emptyState(window.Icons.jeep(26), 'No active jeepneys on this route.', 'Tracking appears here when a device starts sending GPS.');
+        return;
+      }
+      var shown = devices.slice(0, DEVICE_CARD_CAP);
+      host.innerHTML =
+        shown.map(function (d) { return UI.jeepCard(d, { destination: Store.session.destination }); }).join('') +
+        (devices.length > shown.length
+          ? '<div class="t-small" style="padding:10px 4px">…and ' + (devices.length - shown.length) + ' more live jeepneys on this route.</div>'
+          : '');
     }
 
     function render() {
@@ -1007,17 +1018,21 @@
       var devices = Store.devices({ routeId: routeId, activeOnly: true });
       var online = devices.filter(function (d) { return d.status === 'online'; }).length;
       var stops = (route.stops || []).slice().sort(function (a, b) { return a.order - b.order; });
+      var endsLabel = UI.routeEnds(route);
+      var loopish = endsLabel === 'Loop route';
       var startN = (route.startPoint && route.startPoint.name) || '—';
       var endN = (route.endPoint && route.endPoint.name) || '—';
 
       el.innerHTML =
-        UI.appbar({ title: route.name, subtitle: startN + ' → ' + endN }) +
+        UI.appbar({ title: route.name, subtitle: endsLabel }) +
         '<div class="scroll" style="padding:0 14px 16px">' +
           '<div class="map-frame" style="height:210px;flex:none"><div class="map" id="rd-map"></div></div>' +
           '<div class="title-pill" style="margin:14px 0 12px">' + UI.esc(route.name) + '</div>' +
           '<div class="label-box" style="margin-bottom:14px">' +
-            '<div class="lb-line">Start: ' + UI.esc(startN) + '</div>' +
-            '<div class="lb-line">End: ' + UI.esc(endN) + '</div>' +
+            (loopish
+              ? '<div class="lb-line">Loop route — this jeepney circles back to where it started</div>'
+              : '<div class="lb-line">Start: ' + UI.esc(startN) + '</div>' +
+                '<div class="lb-line">End: ' + UI.esc(endN) + '</div>') +
           '</div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">' +
             (route.isLoop ? '<span class="pill navy">Loop route</span>' : '') +
@@ -1033,17 +1048,18 @@
           '<div class="container pad">' +
             stops
               .map(function (s, i) {
-                var tag = s.type === 'start' ? 'Start' : s.type === 'endpoint' ? 'End' : s.type === 'landmark' ? 'Landmark' : 'Stop';
+                var tag = s.type === 'landmark' ? 'Landmark' : 'Stop';
                 return (
                   '<div class="step-row">' +
                   '<span class="step-num">' + (i + 1) + '</span>' +
                   '<span class="sr-body"><span class="sr-title">' + UI.esc(s.name) + '</span>' +
-                  '<span class="sr-sub">' + (s.type === 'start' ? 'Boarding point' : s.type === 'endpoint' ? 'Terminal' : s.type === 'landmark' ? 'Named landmark' : 'Route stop') + '</span></span>' +
+                  '<span class="sr-sub">' + (s.type === 'landmark' ? 'Named landmark' : 'Route stop') + '</span></span>' +
                   '<span class="tag ' + s.type + '">' + tag + '</span>' +
                   '</div>'
                 );
               })
               .join('') +
+            (stops.length ? '' : '<div class="t-small" style="padding:2px 0 6px">No stops listed — this jeepney follows the line on the map.</div>') +
           '</div>' +
           '<div style="height:12px"></div>' +
         '</div>' +

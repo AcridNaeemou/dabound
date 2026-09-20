@@ -228,14 +228,14 @@
                   lead: window.Brand.jeepAvatar(colorOf(r), 56, { color2: r.color2 || null }),
                   title: r.name,
                   sub:
-                    '<span>' + UI.esc((r.startPoint && r.startPoint.name) + ' → ' + (r.endPoint && r.endPoint.name)) + '</span>' +
+                    '<span>' + UI.esc(UI.routeEnds(r)) + '</span>' +
                     '<span style="display:block;margin-top:4px">' +
                     '<span style="color:' + (devs.length ? '#8ef0b4' : '#ffb3b3') + ';font-weight:600">' +
                     (devs.length ? devs.length + (devs.length > 1 ? ' jeepneys' : ' jeepney') + ' · ' + online + ' live' : 'no jeepney assigned') +
                     '</span>' +
                     ' · ' + ((r.stops || []).length) + ' stops' +
                     (r.isLoop ? ' · loop' : '') +
-                    (r.corridor && r.corridor.length >= 3 ? ' · area' : '') + '</span>',
+                    '</span>',
                 });
               }).join('') +
               '</div>'
@@ -278,10 +278,14 @@
     var el = DOM.el('<div class="screen plain"></div>');
     var kit = null;
 
+    var DEVICE_ROW_CAP = 40;
     function devicesBlock(devices) {
-      return devices.length
-        ? devices.map(function (d) { return adminDeviceRow(d); }).join('')
-        : UI.emptyState(window.Icons.jeep(26), 'No jeepneys assigned.', 'Assign a GPS device to this route.');
+      if (!devices.length) return UI.emptyState(window.Icons.jeep(26), 'No jeepneys assigned.', 'Assign a GPS device to this route.');
+      var shown = devices.slice(0, DEVICE_ROW_CAP);
+      return shown.map(function (d) { return adminDeviceRow(d); }).join('') +
+        (devices.length > shown.length
+          ? '<div class="t-small" style="padding:8px 4px">…and ' + (devices.length - shown.length) + ' more jeepneys on this route — the live map shows them all.</div>'
+          : '');
     }
 
     function render() {
@@ -296,6 +300,11 @@
       }
       var devices = Store.devices({ routeId: routeId });
       var stops = (route.stops || []).slice().sort(function (a, b) { return a.order - b.order; });
+      // project every stop onto the line once per render, not once per row
+      var alongS = {};
+      Geo.stopMetrics(route).forEach(function (m) { alongS[m.stop.id] = m.s; });
+      var endsLabel = UI.routeEnds(route);
+      var loopish = endsLabel === 'Loop route';
       var startN = (route.startPoint && route.startPoint.name) || '—';
       var endN = (route.endPoint && route.endPoint.name) || '—';
       el.innerHTML =
@@ -305,8 +314,10 @@
           '<div class="map-frame" style="height:200px;flex:none"><div class="map" id="ard-map"></div></div>' +
           '<div class="title-pill" style="margin:14px 0 12px">' + UI.esc(route.name) + '</div>' +
           '<div class="label-box" style="margin-bottom:14px">' +
-            '<div class="lb-line">Start: ' + UI.esc(startN) + '</div>' +
-            '<div class="lb-line">End: ' + UI.esc(endN) + '</div>' +
+            (loopish
+              ? '<div class="lb-line">Loop route — jeepneys circle back to where they started</div>'
+              : '<div class="lb-line">Start: ' + UI.esc(startN) + '</div>' +
+                '<div class="lb-line">End: ' + UI.esc(endN) + '</div>') +
           '</div>' +
           '<div id="ard-pills" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">' +
             (route.isLoop ? '<span class="pill navy">Loop route</span>' : '') +
@@ -317,13 +328,11 @@
           '<div class="section-label" style="margin-top:0">Stops &amp; landmarks</div>' +
           '<div class="container pad">' +
             stops.map(function (s, i) {
-              var tag = s.type === 'start' ? 'Start' : s.type === 'endpoint' ? 'End' : s.type === 'landmark' ? 'Landmark' : 'Stop';
-              var metrics = Geo.stopMetrics(route);
-              var mine = null;
-              metrics.forEach(function (m) { if (m.stop === s) mine = m; });
-              var along = mine && mine.s > 40
-                ? Geo.formatDistance(mine.s) + ' from the start'
-                : tag === 'Start' ? 'Starting point' : tag === 'Landmark' ? 'Landmark on this route' : 'Stop on this route';
+              var tag = s.type === 'landmark' ? 'Landmark' : 'Stop';
+              var sAlong = alongS[s.id];
+              var along = sAlong != null && sAlong > 40
+                ? Geo.formatDistance(sAlong) + ' along the route'
+                : tag === 'Landmark' ? 'Landmark on this route' : 'Stop on this route';
               return (
                 '<div class="step-row">' +
                 '<span class="step-num">' + (i + 1) + '</span>' +
@@ -333,9 +342,17 @@
                 '</div>'
               );
             }).join('') +
+            (stops.length ? '' : '<div class="t-small" style="padding:2px 0 6px">No stops listed — this route is the drawn line only.</div>') +
           '</div>' +
           '<div class="section-label">Jeepneys on this route</div>' +
           '<div class="pill-list flush" id="ard-devices">' + devicesBlock(devices) + '</div>' +
+          '<div class="section-label">Simulated fleet</div>' +
+          '<div class="t-small" style="padding:2px 0 8px">A route in real life carries hundreds of jeepneys, so you can drop a whole fleet of virtual ones onto the line at once — evenly spaced with a little jitter so they drive like traffic, not like a convoy — and take them all back off when the run is over.</div>' +
+          '<div class="btn-row">' +
+            '<input id="ard-fleet-count" type="number" inputmode="numeric" min="1" max="500" step="1" value="25" aria-label="How many jeepneys to drop" style="width:5.5em;min-width:4em" />' +
+            '<button class="bar-action" data-act="fleet-add">' + window.Icons.plus(18) + ' Drop fleet</button>' +
+            '<button class="bar-action danger" data-act="fleet-clear">' + window.Icons.trash(18) + ' Take fleet off</button>' +
+          '</div>' +
           '<div class="btn-row" style="margin-top:18px">' +
             '<button class="bar-action danger" data-act="delete">' + window.Icons.trash(18) + ' Delete</button>' +
             '<button class="bar-action" data-act="edit2">' + window.Icons.pencil(18) + ' Edit route</button>' +
@@ -358,6 +375,22 @@
         el.addEventListener('click', async function (e) {
           if (e.target.closest('[data-act="edit"]') || e.target.closest('[data-act="edit2"]')) {
             window.Router.go('admin-route-editor', { routeId: routeId });
+            return;
+          }
+          if (e.target.closest('[data-act="fleet-add"]')) {
+            var n = parseInt((DOM.qs(el, '#ard-fleet-count') || {}).value || '', 10);
+            if (!isFinite(n) || n < 1 || n > 500) { UI.toast('Pick a number of jeepneys from 1 to 500', 'error'); return; }
+            try {
+              var made = await window.API.addFleet(routeId, n);
+              UI.toast('Dropped ' + made.created + ' virtual jeepneys onto the line', 'success');
+            } catch (err) { UI.toast(err.message, 'error'); }
+            return;
+          }
+          if (e.target.closest('[data-act="fleet-clear"]')) {
+            try {
+              var gone = await window.API.clearFleet(routeId);
+              UI.toast(gone.removed ? 'Took ' + gone.removed + ' virtual jeepneys off the line' : 'No virtual jeepneys on this route', 'success');
+            } catch (err) { UI.toast(err.message, 'error'); }
             return;
           }
           if (e.target.closest('[data-act="delete"]')) {
@@ -414,12 +447,15 @@
           })
         : [],
       path: editing ? (editing.path || []).slice() : [],
-      corridor: editing && editing.corridor ? editing.corridor.slice() : [],
       mode: null,
     };
     var history = [];
     var future = [];
     var baseline = null;
+    // when the last freehand stroke ended: Leaflet fires a click at the release
+    // point right after mouseup/touchend, and that click must not drop a stray
+    // vertex on the line the admin just drew.
+    var lastStrokeAt = 0;
     var el = DOM.el('<div class="screen plain"></div>');
     var kit = null;
 
@@ -439,24 +475,21 @@
     }
 
     function hintText() {
-      if (draft.mode === 'start') return 'Tap the map to place the route start.';
-      if (draft.mode === 'stop') return 'Tap the map to add a stop / landmark.';
-      if (draft.mode === 'endpoint') return 'Tap the map to place the endpoint (same as start = loop route).';
-      if (draft.mode === 'draw') return 'Drag on the map to draw the road line, or tap to drop single points.';
+      if (draft.mode === 'stop') return 'Tap the map to add a stop / landmark passengers will see as "Near X".';
+      if (draft.mode === 'draw') return 'Drag on the map to draw the route freely — close the loop back where you began if it loops.';
       if (draft.mode === 'edit') return 'Drag the red handles to reshape the line, or tap the line to squeeze a new point in between.';
       if (draft.mode === 'erase') return 'Tap the line where a section is wrong — only that part is removed, the rest of the line stays.';
-      if (draft.mode === 'area') return 'Tap around the edges of the route area. Three or more points close the shaded corridor.';
-      return 'Choose a tool below, then tap the map. Generate Path snaps the route to real roads.';
+      return 'Draw the route freely, then Stabilize Route snaps whatever you drew onto the roads.';
     }
 
     /* --- undo / redo -------------------------------------------------------
        Every edit snapshots the whole draft, so undo always steps back exactly
        one action (spec 45, 87, 91). */
-    function snap() { return JSON.stringify({ name: draft.name, color: draft.color, color2: draft.color2, points: draft.points, path: draft.path, corridor: draft.corridor }); }
+    function snap() { return JSON.stringify({ name: draft.name, color: draft.color, color2: draft.color2, points: draft.points, path: draft.path }); }
     function restore(json) {
       var d = JSON.parse(json);
       draft.name = d.name; draft.color = d.color; draft.color2 = d.color2 || null; draft.points = d.points;
-      draft.path = d.path; draft.corridor = d.corridor;
+      draft.path = d.path;
       var nameInput = DOM.qs(el, '#re-name');
       if (nameInput && nameInput.value !== d.name) nameInput.value = d.name;
       paintColorDot();
@@ -534,14 +567,11 @@
           '<div class="map-frame" style="height:300px;flex:none"><div class="map" id="re-map"></div></div>' +
           '<div id="re-panel" style="padding:10px 0 0"></div>' +
           '<div class="bar-stack inline">' +
-          '<button class="bar-action" data-mode="start">' + window.Icons.play(17) + ' Set Start</button>' +
-          '<button class="bar-action" data-mode="stop">' + window.Icons.plus(17) + ' Add Stop / Landmark</button>' +
-          '<button class="bar-action" data-mode="endpoint">' + window.Icons.flag(17) + ' Set Endpoint</button>' +
           '<button class="bar-action" data-mode="draw">' + window.Icons.pencil(17) + ' Draw Route</button>' +
           '<button class="bar-action" data-mode="edit">' + window.Icons.target(17) + ' Edit Line</button>' +
           '<button class="bar-action" data-mode="erase">' + window.Icons.trash(17) + ' Erase Part</button>' +
-          '<button class="bar-action" data-mode="area">' + window.Icons.polygon(17) + ' Draw Area</button>' +
-            '<button class="bar-action quiet" data-act="generate">' + window.Icons.routeIcon(17) + ' Generate Path</button>' +
+          '<button class="bar-action" data-mode="stop">' + window.Icons.plus(17) + ' Add Stop / Landmark</button>' +
+            '<button class="bar-action quiet" data-act="stabilize">' + window.Icons.spark(17) + ' Stabilize Route</button>' +
           '</div>' +
         '</div>';
 
@@ -592,12 +622,20 @@
         return pts.filter(function (p, i) { return keep[i]; });
       }
 
+      var previewQueued = false;
       function preview() {
-        if (!stroke) return;
-        // show what is already drawn plus the line being dragged, so a second
-        // stroke visibly continues the first instead of replacing it
-        var all = (draft.path || []).concat(stroke);
-        kit.drawRoute({ path: all }, { showStops: false, labels: false, color: '#F9C74F' });
+        if (!stroke || previewQueued) return;
+        // coalesce mousemove bursts into one repaint per frame: a 120 Hz
+        // mouse used to rebuild the preview polyline several times a frame
+        previewQueued = true;
+        requestAnimationFrame(function () {
+          previewQueued = false;
+          if (!stroke) return;
+          // show what is already drawn plus the line being dragged, so a second
+          // stroke visibly continues the first instead of replacing it
+          var all = (draft.path || []).concat(stroke);
+          kit.drawRoute({ path: all }, { showStops: false, labels: false, color: '#F9C74F' });
+        });
       }
 
       /* Join a freshly drawn stroke onto the path that is already there. Drawing a
@@ -636,19 +674,15 @@
       });
       function endStroke() {
         if (!stroke) return;
-        if (draft.mode !== 'draw') kit.map.dragging.enable();
         var drawn = stroke;
         stroke = null;
+        // the tool can be switched mid-drag; a stroke then belongs to a tool
+        // that is no longer active, so drop it instead of appending it
+        if (draft.mode !== 'draw') { kit.map.dragging.enable(); paintMap(); return; }
         if (drawn.length < 2) { paintMap(); return; }
+        lastStrokeAt = Date.now();
         pushHistory();
         var seg = simplify(drawn, 6);
-        // snap the drawn ends onto the start/endpoint when they are close by
-        var start = draft.points[0];
-        var end = draft.points[draft.points.length - 1];
-        if (start && start.type === 'start' && window.Geo.haversine(seg[0], start) < 60) seg[0] = { lat: start.lat, lng: start.lng };
-        if (end && end.type === 'endpoint' && window.Geo.haversine(seg[seg.length - 1], end) < 60) {
-          seg[seg.length - 1] = { lat: end.lat, lng: end.lng };
-        }
         // extend what is already drawn rather than starting over each stroke
         var added = draft.path && draft.path.length ? seg.length - 1 : seg.length;
         draft.path = joinStrokes(draft.path || [], seg);
@@ -689,9 +723,7 @@
       if (!panel) return;
       var rows = draft.points.length
         ? draft.points.map(function (p, i) {
-            var isStart = i === 0;
-            var isEnd = i === draft.points.length - 1 && draft.points.length > 1;
-            var tag = isStart ? 'Start' : isEnd ? 'End' : p.type === 'landmark' ? 'Landmark' : 'Stop';
+            var tag = p.type === 'landmark' ? 'Landmark' : 'Stop';
             return (
               '<div class="step-row" data-point="' + i + '">' +
               '<span class="step-num">' + (i + 1) + '</span>' +
@@ -700,21 +732,19 @@
               '<span class="sr-sub">' + UI.esc(pointHint(draft.points, i)) + '</span>' +
               '</span>' +
               '<span style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' +
-              '<span class="tag ' + (isStart ? 'start' : isEnd ? 'endpoint' : p.type) + '">' + tag + '</span>' +
-              (isStart || isEnd
-                ? '<button class="icon-btn muted" data-remove="' + i + '" aria-label="Remove point" style="color:var(--mid)">' + window.Icons.x(16) + '</button>'
-                : '<span style="display:flex;gap:4px;align-items:center">' +
-                  '<select class="select" style="padding:9px 22px 9px 10px;font-size:11.5px;width:104px;border-radius:12px" data-type="' + i + '">' +
-                    '<option value="stop"' + (p.type === 'stop' ? ' selected' : '') + '>Stop</option>' +
-                    '<option value="landmark"' + (p.type === 'landmark' ? ' selected' : '') + '>Landmark</option>' +
-                  '</select>' +
-                  '<button class="icon-btn muted" data-remove="' + i + '" aria-label="Remove point" style="color:var(--mid)">' + window.Icons.x(16) + '</button>' +
-                  '</span>') +
+              '<span class="tag ' + p.type + '">' + tag + '</span>' +
+              '<span style="display:flex;gap:4px;align-items:center">' +
+                '<select class="select" style="padding:9px 22px 9px 10px;font-size:11.5px;width:104px;border-radius:12px" data-type="' + i + '">' +
+                  '<option value="stop"' + (p.type === 'stop' ? ' selected' : '') + '>Stop</option>' +
+                  '<option value="landmark"' + (p.type === 'landmark' ? ' selected' : '') + '>Landmark</option>' +
+                '</select>' +
+                '<button class="icon-btn muted" data-remove="' + i + '" aria-label="Remove point" style="color:var(--mid)">' + window.Icons.x(16) + '</button>' +
+              '</span>' +
               '</span>' +
               '</div>'
             );
           }).join('')
-        : '<div class="t-small" style="padding:4px 0 8px">No points yet. Use <b>Set Start</b>, then tap the map.</div>';
+        : '<div class="t-small" style="padding:4px 0 8px">No stops yet — they are optional. Draw the route freely with <b>Draw Route</b>.</div>';
 
       panel.innerHTML =
         '<div class="t-cap" style="margin:0 0 8px;display:flex;gap:8px;align-items:flex-start">' +
@@ -722,39 +752,15 @@
           '<span id="re-hint">' + UI.esc(hintText()) + '</span>' +
         '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span class="t-card">' + draft.points.length + ' points · ' + draft.path.length + ' path nodes' +
+          '<span class="t-card">' + draft.points.length + (draft.points.length === 1 ? ' stop · ' : ' stops · ') + draft.path.length + ' path nodes' +
           (draft.path.length ? ' · ' + (pathDistance() / 1000).toFixed(1) + ' km' : '') + '</span>' +
           (editing ? '<button class="icon-btn muted" data-act="delete" aria-label="Delete route">' + window.Icons.trash(19) + '</button>' : '') +
         '</div>' +
-        (draft.corridor.length
-          ? '<div class="area-row">' +
-            '<span class="area-chip">' + window.Icons.polygon(14) + '</span>' +
-            '<span class="sr-body"><b>Route area</b><span class="sr-sub">' +
-            (draft.corridor.length >= 3
-              ? draft.corridor.length + ' corner points · shaded corridor on the map'
-              : draft.corridor.length + ' corner point' + (draft.corridor.length > 1 ? 's' : '') + ' · add ' + (3 - draft.corridor.length) + ' more to close') +
-            '</span></span>' +
-            '<button class="icon-btn muted" data-act="clear-area" aria-label="Clear area" style="color:var(--mid)">' + window.Icons.trash(16) + '</button>' +
-            '</div>'
-          : '') +
         rows;
     }
 
     function paintMap() {
       if (!kit) return;
-      var editingArea = draft.mode === 'area';
-      kit.drawCorridor(draft.corridor, {
-        handles: editingArea,
-        dim: false,
-        onMarkerTap: handleTap,
-        onDragEnd: function (i, latlng) {
-          pushHistory();
-          draft.corridor[i].lat = latlng.lat;
-          draft.corridor[i].lng = latlng.lng;
-          paintPoints();
-          paintMap();
-        },
-      });
       kit.drawDraft(draft.points, draft.path, {
         onMarkerTap: handleTap,
         onDragEnd: function (i, latlng) {
@@ -784,22 +790,15 @@
     function fitDraft() {
       if (!kit) return;
       if (kit.resize) kit.resize();
-      var all = draft.points.concat(draft.corridor || []);
+      var all = draft.points.concat(draft.path || []);
       if (all.length) kit.fitPoints(all, [30, 50]);
       else kit.map.setView([7.0858, 125.6175], 13);
     }
 
     function handleTap(latlng) {
+      if (draft.mode === 'draw' && Date.now() - lastStrokeAt < 700) return;
       if (!draft.mode) {
-        UI.toast('Pick a tool first — Set Start, Add Stop, Set Endpoint, Draw Route or Draw Area');
-        return;
-      }
-      if (draft.mode === 'area') {
-        pushHistory();
-        draft.corridor.push({ lat: latlng.lat, lng: latlng.lng });
-        paintPoints();
-        paintMap();
-        if (draft.corridor.length === 3) UI.toast('Area closed — keep tapping to refine the corridor, drag handles to adjust');
+        UI.toast('Pick a tool first — Draw Route, Edit Line, Erase Part or Add Stop');
         return;
       }
       if (draft.mode === 'edit') {
@@ -848,19 +847,10 @@
         return;
       }
       pushHistory();
-      if (draft.mode === 'start') {
-        var first = draft.points[0];
-        if (first && first.type === 'start') { first.lat = latlng.lat; first.lng = latlng.lng; }
-        else draft.points.unshift({ lat: latlng.lat, lng: latlng.lng, name: 'Start point', type: 'start' });
-      } else if (draft.mode === 'endpoint') {
-        var last = draft.points[draft.points.length - 1];
-        if (last && last.type === 'endpoint') { last.lat = latlng.lat; last.lng = latlng.lng; }
-        else draft.points.push({ lat: latlng.lat, lng: latlng.lng, name: 'Endpoint', type: 'endpoint' });
-      } else if (draft.mode === 'stop') {
-        var insertAt = draft.points.length && draft.points[draft.points.length - 1].type === 'endpoint' ? draft.points.length - 1 : draft.points.length;
+      if (draft.mode === 'stop') {
         promptName('Name this stop or landmark', '').then(function (name) {
           if (name == null) { history.pop(); return; }
-          draft.points.splice(Math.max(1, insertAt), 0, {
+          draft.points.push({
             lat: latlng.lat,
             lng: latlng.lng,
             name: name || 'Stop ' + (draft.points.length + 1),
@@ -871,11 +861,12 @@
           UI.toast('Stop added');
         });
         return;
-      } else if (draft.mode === 'draw') {
-        draft.path.push({ lat: latlng.lat, lng: latlng.lng });
       }
-      paintPoints();
-      paintMap();
+      if (draft.mode === 'draw') {
+        draft.path.push({ lat: latlng.lat, lng: latlng.lng });
+        paintPoints();
+        paintMap();
+      }
     }
 
     function promptName(title, value) {
@@ -903,30 +894,50 @@
       });
     }
 
-    async function generatePath() {
-      pushHistory();
-      if (draft.points.length < 2) {
-        UI.toast('Add at least a start and an endpoint first', 'error');
+    /* "Stabilize Route" takes whatever the admin drew and snaps it onto the
+       road network: the freehand line is decimated to a handful of waypoints,
+       sent to the road router, and replaced with the road-following path. */
+    function decimate(list, maxPts) {
+      if (list.length <= maxPts) return list.slice();
+      var out = [list[0]];
+      var step = (list.length - 1) / (maxPts - 1);
+      for (var i = 1; i < maxPts - 1; i++) out.push(list[Math.round(i * step)]);
+      out.push(list[list.length - 1]);
+      return out;
+    }
+
+    async function stabilizeRoute() {
+      if (!draft.path || draft.path.length < 2) {
+        UI.toast('Draw the route line first (Draw Route, then drag across the map)', 'error');
         return;
       }
-      var tool = DOM.qs(el, '[data-act="generate"]');
-      if (tool) tool.innerHTML = '<span class="spinner" style="border-top-color:#fff"></span> Building…';
+      var tool = DOM.qs(el, '[data-act="stabilize"]');
+      if (tool) tool.innerHTML = '<span class="spinner" style="border-top-color:#fff"></span> Snapping…';
+      var before = draft.path.length;
+      var applied = false;
       try {
-        var res = await window.API.roadRoute(draft.points.map(function (p) { return { lat: p.lat, lng: p.lng }; }));
-        draft.path = res.path || [];
-        UI.toast(res.source === 'osrm' ? 'Route generated along real roads' : 'Straight-line preview (routing service offline)', res.source === 'osrm' ? 'success' : undefined);
-      } catch (e) {
-        draft.path = [];
-        for (var i = 1; i < draft.points.length; i++) {
-          var a = draft.points[i - 1], b = draft.points[i];
-          if (!draft.path.length) draft.path.push({ lat: a.lat, lng: a.lng });
-          for (var s = 1; s <= 24; s++) draft.path.push({ lat: a.lat + ((b.lat - a.lat) * s) / 24, lng: a.lng + ((b.lng - a.lng) * s) / 24 });
+        var pts = decimate(draft.path, 24).map(function (p) { return { lat: p.lat, lng: p.lng }; });
+        var res = await window.API.roadRoute(pts);
+        // Only real road geometry may replace the drawing. The routing endpoint
+        // falls back to straight-line segments between the waypoints when OSRM
+        // is unreachable (source 'straight'), and swapping that in would flatten
+        // the admin's line into a few long jumps while claiming nothing changed.
+        if (res && res.source === 'osrm' && (res.path || []).length >= 2) {
+          pushHistory();
+          draft.path = res.path;
+          applied = true;
+          UI.toast('Route stabilized onto real roads (' + before + ' → ' + draft.path.length + ' points)', 'success');
+        } else {
+          UI.toast('Road routing offline — your drawn line is kept as is', 'error');
         }
-        UI.toast('Routing service unavailable — straight-line preview used', 'error');
+      } catch (e) {
+        UI.toast('Road routing unavailable — your drawn line is kept as is', 'error');
       }
-      if (tool) tool.innerHTML = window.Icons.routeIcon(17) + ' Generate Path';
-      paintPoints();
-      paintMap();
+      if (tool) tool.innerHTML = window.Icons.spark(17) + ' Stabilize Route';
+      if (applied) {
+        paintPoints();
+        paintMap();
+      }
     }
 
     function undo() {
@@ -952,13 +963,10 @@
     async function save() {
       var name = DOM.qs(el, '#re-name').value.trim();
       if (!name) { UI.toast('Route name is required', 'error'); return; }
-      if (draft.points.length < 2) { UI.toast('Add a start and an endpoint (at least two points)', 'error'); return; }
-      if (!draft.path.length) await generatePath();
-      if (!draft.path.length) { UI.toast('Could not build a path — try Generate Path again', 'error'); return; }
+      if (draft.path.length < 2) { UI.toast('Draw the route line first — at least two taps', 'error'); return; }
 
       var stops = draft.points.map(function (p, i) {
-        var type = i === 0 ? 'start' : i === draft.points.length - 1 ? 'endpoint' : p.type === 'landmark' ? 'landmark' : 'stop';
-        return { name: p.name || 'Stop ' + (i + 1), latitude: p.lat, longitude: p.lng, type: type, order: i + 1 };
+        return { name: p.name || 'Stop ' + (i + 1), latitude: p.lat, longitude: p.lng, type: p.type === 'landmark' ? 'landmark' : 'stop', order: i + 1 };
       });
       var payload = {
         name: name,
@@ -966,13 +974,6 @@
         color2: draft.color2 || null,
         stops: stops,
         path: draft.path,
-        corridor: draft.corridor.length >= 3 ? draft.corridor : [],
-        startPoint: { lat: stops[0].latitude, lng: stops[0].longitude, name: stops[0].name },
-        endPoint: {
-          lat: stops[stops.length - 1].latitude,
-          lng: stops[stops.length - 1].longitude,
-          name: stops[stops.length - 1].name,
-        },
         active: true,
       };
       try {
@@ -1012,7 +1013,6 @@
           return { lat: st.latitude, lng: st.longitude, name: st.name, type: st.type };
         });
         draft.path = (r.path || []).slice();
-        draft.corridor = r.corridor ? r.corridor.slice() : [];
         start();
       },
       unmount: function () { if (kit) kit.destroy(); kit = null; },
@@ -1075,18 +1075,10 @@
             toggleColorPanel();
             return;
           }
-          if (e.target.closest('[data-act="generate"]')) return generatePath();
+          if (e.target.closest('[data-act="stabilize"]')) return stabilizeRoute();
           if (e.target.closest('[data-act="undo"]')) return undo();
           if (e.target.closest('[data-act="redo"]')) return redo();
 
-          if (e.target.closest('[data-act="clear-area"]')) {
-            pushHistory();
-            draft.corridor = [];
-            paintPoints();
-            paintMap();
-            UI.toast('Route area cleared');
-            return;
-          }
           if (e.target.closest('[data-act="save"]')) return save();
           if (e.target.closest('[data-act="delete"]')) {
             var yes = await UI.confirm({
@@ -1163,23 +1155,41 @@
       });
     }
 
+    /* Positions change on every telemetry tick; rebuilding a list that can
+     * hold hundreds of rows eight times in ten seconds would jank the phone
+     * for detail nobody reads at that rate. Re-render only when membership,
+     * status or assignment actually changes. */
+    function signature() {
+      return Store.state.devices
+        .map(function (d) { return d.id + d.status + (d.routeId || '-') + (d.simulated ? 1 : 0); })
+        .join(',') +
+        '|' + Store.state.routes.map(function (r) { return r.id + r.name + (r.updatedAt || ''); }).join(',');
+    }
+    var lastSig = null;
+
     return {
       el: el,
       mount: function () {
         render();
+        lastSig = signature();
         el.addEventListener('click', function (e) {
-          if (e.target.closest('[data-act="clear-search"]')) { q = ''; render(); return; }
+          if (e.target.closest('[data-act="clear-search"]')) { q = ''; render(); lastSig = signature(); return; }
           var card = e.target.closest('[data-device]');
           if (card) window.Router.go('admin-device-detail', { deviceId: card.dataset.device });
         });
       },
-      update: render,
+      update: function () {
+        var sig = signature();
+        if (sig === lastSig) return;
+        lastSig = sig;
+        render();
+      },
     };
   }
 
   /** Humane hint for an editor point: distance from the previous point. */
   function pointHint(points, i) {
-    if (i === 0) return 'Starting point';
+    if (i === 0) return 'First stop on the list';
     var a = points[i - 1];
     var b = points[i];
     var m = Geo.haversine({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng });
@@ -1494,11 +1504,8 @@
     function renderMap() {
       if (!kit) return;
       kit.clearRoute();
-      kit.clearCorridor();
       Store.state.routes.forEach(function (r) {
         if (!Store.devices({ routeId: r.id, activeOnly: true }).length) return;
-        // corridor first, then the route line on top of it (spec 49)
-        if (r.corridor && r.corridor.length >= 3) kit.drawCorridor(r.corridor, { dim: true, fillColor: colorOf(r) === '#ADB5BD' ? '#173B5C' : colorOf(r) });
         kit.drawRoute(r, { dim: true, showStops: false, casing: false, weight: 4, color: colorOf(r) === '#ADB5BD' ? '#173B5C' : colorOf(r) });
       });
       var visible = Store.devices({ activeOnly: true });

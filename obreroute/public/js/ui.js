@@ -181,15 +181,26 @@
     );
   }
 
-  /** Passenger route row: circular jeepney art + name + start→end + live badge. */
+  /** One-line description of where a route goes.
+   *
+   *  Routes are drawn freeform and usually come back around, so the server only
+   *  fills startPoint/endPoint names when a stop happens to sit on the line's
+   *  ends. Whenever that naming is missing, identical, or the route is a loop,
+   *  say "Loop route" instead of inventing "Start → End". */
+  function routeEnds(route) {
+    var a = (route && route.startPoint && route.startPoint.name) || '';
+    var b = (route && route.endPoint && route.endPoint.name) || '';
+    if (a && b && a !== b && !route.isLoop) return a + ' → ' + b;
+    return 'Loop route';
+  }
+
+  /** Passenger route row: circular jeepney art + name + ends + live badge. */
   function routeCard(route, opts) {
     opts = opts || {};
     var devices = window.Store.devices({ routeId: route.id, activeOnly: true });
     var online = devices.filter(function (d) { return d.status === 'online'; }).length;
-    var startN = (route.startPoint && route.startPoint.name) || 'Start';
-    var endN = (route.endPoint && route.endPoint.name) || 'End';
     var km = route.distanceM ? (route.distanceM / 1000).toFixed(1) + ' km' : '';
-    var sub = esc(startN) + ' → ' + esc(endN) + (km ? ' · ' + km : '') + (route.isLoop ? ' · loop' : '');
+    var sub = esc(routeEnds(route)) + (km ? ' · ' + km : '');
     return (
       '<button class="pill-row light" data-route="' + esc(route.id) + '" type="button" style="min-height:74px">' +
       window.Brand.jeepAvatar(opts.color || route.color || window.Brand.colorFor(route.id), 54, { color2: route.color2 || null }) +
@@ -337,12 +348,18 @@
   }
 
   /* ------------------------------------------------------------ trip maths */
+  var tripPrepRoute = null;
+  var tripPrep = null;
+
   function tripContext(device, opts) {
     opts = opts || {};
     var route = window.Store.routeById(device.routeId);
     var out = { etaSec: null, etaCaption: 'eta', distanceM: null, landmarkName: device.landmark ? device.landmark.name : null, target: null };
     if (opts.destination && route && device.s != null) {
-      var prep = Geo.prepare(route.path);
+      // one projection per route per render pass, not one per device card:
+      // the store replaces route objects on refresh, which drops this memo
+      if (route !== tripPrepRoute) { tripPrepRoute = route; tripPrep = Geo.prepare(route.path); }
+      var prep = tripPrep;
       var pr = Geo.project(prep, { lat: opts.destination.latitude, lng: opts.destination.longitude }, null, null);
       if (pr.offM < 400) {
         var rem = Geo.remainingTo(prep, device.s, pr.s, !!route.isLoop);
@@ -463,6 +480,7 @@
     placeholderRow: placeholderRow,
     jeepCard: jeepCard,
     routeCard: routeCard,
+    routeEnds: routeEnds,
     tipsCard: tipsCard,
     statList: statList,
     tripContext: tripContext,

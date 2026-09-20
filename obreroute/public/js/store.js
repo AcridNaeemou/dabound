@@ -62,8 +62,13 @@
     if (!Array.isArray(devices)) return;
     devices.forEach(function (d) {
       var idx = state.devices.findIndex(function (x) { return x.id === d.id; });
-      if (idx >= 0) state.devices[idx] = d;
-      else state.devices.push(d);
+      if (idx >= 0) {
+        // the per-tick stream sends partial updates (only what moves); merge
+        // them over the full object from the last snapshot instead of clobbering it
+        Object.assign(state.devices[idx], d);
+      } else {
+        state.devices.push(d);
+      }
     });
     reindex();
   }
