@@ -179,33 +179,47 @@
     deviceById: function (id) { return deviceIndex.get(id) || null; },
     devices: function (opts) {
       opts = opts || {};
-      return state.devices.filter(function (d) {
-        if (opts.routeId && d.routeId !== opts.routeId) return false;
-        if (opts.activeOnly && !d.active) return false;
-        if (opts.onlineOnly && d.status !== 'online') return false;
-        if (opts.servingDestination && opts.destination) {
-          var dest = opts.destination;
-          var dp = { lat: dest.latitude, lng: dest.longitude };
-          var r = d.routeId ? state.routes.find(function (x) { return x.id === d.routeId; }) : null;
-          var serving;
-          if (r && r.path && r.path.length > 1) {
-            // Geometric truth: does this route actually pass the destination?
-            var prep = prepCache[r.id];
-            if (!prep || prep.len !== r.path.length) {
-              prep = window.Geo.prepare(r.path);
-              prep.len = r.path.length;
-              prepCache[r.id] = prep;
+      function pass(nearM) {
+        return state.devices.filter(function (d) {
+          if (opts.routeId && d.routeId !== opts.routeId) return false;
+          if (opts.activeOnly && !d.active) return false;
+          if (opts.onlineOnly && d.status !== 'online') return false;
+          if (opts.servingDestination && opts.destination) {
+            var dest = opts.destination;
+            var dp = { lat: dest.latitude, lng: dest.longitude };
+            var r = d.routeId ? state.routes.find(function (x) { return x.id === d.routeId; }) : null;
+            var serving;
+            if (r && r.path && r.path.length > 1) {
+              // Geometric truth: does this route actually pass the destination?
+              var prep = prepCache[r.id];
+              if (!prep || prep.len !== r.path.length) {
+                prep = window.Geo.prepare(r.path);
+                prep.len = r.path.length;
+                prepCache[r.id] = prep;
+              }
+              serving = window.Geo.project(prep, dp, null, null).offM <= nearM;
+            } else {
+              // No geometry to test (a route with a single point) — fall back to the
+              // curated list an admin attached to the destination.
+              serving = (dest.routeIds || []).indexOf(d.routeId) >= 0;
             }
-            serving = window.Geo.project(prep, dp, null, null).offM <= (opts.nearM || 100);
-          } else {
-            // No geometry to test (a route with a single point) — fall back to the
-            // curated list an admin attached to the destination.
-            serving = (dest.routeIds || []).indexOf(d.routeId) >= 0;
+            if (!serving) return false;
           }
-          if (!serving) return false;
-        }
-        return true;
-      });
+          return true;
+        });
+      }
+      var list = pass(opts.nearM || 100);
+      // Built-in places carry POI-centroid coordinates — a mall or park marker can
+      // sit 100–300 m from the road the jeepneys actually run on, while a pin is
+      // dropped ON that road. Without this second look every premade destination
+      // would say "no jeepneys" even where a pin at the same place lists them.
+      // The strict radius still wins whenever anything passes it, so routes that
+      // really serve the spot are never diluted; the relaxed one only rescues the
+      // otherwise-empty case, and applies to pins and premade places alike.
+      if (!list.length && opts.servingDestination && opts.destination) {
+        list = pass(opts.farM || 350);
+      }
+      return list;
     },
     onlineCount: function () {
       return state.devices.filter(function (d) { return d.status === 'online'; }).length;

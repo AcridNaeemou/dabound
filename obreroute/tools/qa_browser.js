@@ -293,10 +293,11 @@ async function deviceState() {
     // With no destination chosen the routes are hidden (spec: don't overload the
     // map), so the centre of the map is not guaranteed to be on a route any more.
     // Tap just beside the live jeepney instead: it is sitting on its own path, so
-    // the pin lands inside the 100 m "this jeepney will actually get you there"
-    // filter. The offset has to clear the 22 px marker but stay well under 100 m
-    // on the ground — at this zoom the route spans ~1.2 km over ~276 px, so keep
-    // it to ~14 px (≈60 m) rather than something that looks safe in pixels.
+    // the pin lands inside the "this jeepney will actually get you there" filter
+    // (strict 100 m, relaxed to 350 m when nothing passes that close). The offset
+    // has to clear the 22 px marker but stay well under 350 m on the ground — at
+    // this zoom the route spans ~1.2 km over ~276 px, so keep it to ~14 px rather
+    // than something that looks safe in pixels.
     const jeepBox = await page.locator('#p-map .mk-jeep-dot').first().boundingBox().catch(() => null);
     const off = jeepBox ? jeepBox.width / 2 + 4 : 0;
     const tapX = jeepBox ? jeepBox.x + jeepBox.width / 2 + off : mapBox.x + mapBox.width / 2;
@@ -329,11 +330,14 @@ async function deviceState() {
     ok('The pin becomes the passenger destination', !!picked && picked.custom === true, JSON.stringify(picked && picked.label));
 
     // "Used like any other destination" means the pin is filtered by real route
-    // geometry: a jeepney is listed only if its route passes within 100 m of it.
-    // Assert that against geometry rather than against wherever this particular
-    // tap happened to land, so the check does not depend on the map's zoom level
-    // (at the zoom used here one pixel is ~11 m, so a tap that clears the 22 px
-    // jeepney marker is already ~170 m off the route).
+    // geometry, with the same two-tier rule the premade places use: a jeepney is
+    // listed if its route passes within 100 m of the point, and when nothing
+    // passes that strictly the radius relaxes once to 350 m (POI centroids for
+    // built-in places sit that far off the road all the time). Assert that
+    // against geometry rather than against wherever this particular tap happened
+    // to land, so the check does not depend on the map's zoom level (at the zoom
+    // used here one pixel is ~11 m, so a tap that clears the 22 px jeepney
+    // marker is already ~170 m off the route — inside the relaxed radius).
     const rule = await page.evaluate((path) => {
       const G = window.Geo;
       const prep = G.prepare(path);
@@ -346,17 +350,26 @@ async function deviceState() {
       });
       return {
         onPath: probe(path[2].lat, path[2].lng),
+        // due west of the corner bend: clear of every leg of the route
+        relaxed: probe(path[2].lat, path[2].lng - 0.0022),  // ~240 m off
+        beyond: probe(path[2].lat, path[2].lng - 0.0054),   // ~600 m off
         farAway: probe(path[2].lat + 0.05, path[2].lng + 0.05),
       };
     }, ROUTE.path);
     ok('A pin dropped on a route lists the jeepneys that pass it (100 m filter)',
       rule.onPath.offM <= 100 && rule.onPath.listed.indexOf(DEV) >= 0,
       `${rule.onPath.offM} m off route → ${rule.onPath.listed.join(', ') || 'none'}`);
+    ok('A place ~240 m off the route is picked up by the relaxed radius',
+      rule.relaxed.offM > 100 && rule.relaxed.offM <= 350 && rule.relaxed.listed.indexOf(DEV) >= 0,
+      `${rule.relaxed.offM} m off route → ${rule.relaxed.listed.join(', ') || 'none'}`);
+    ok('A place beyond the relaxed radius lists no jeepneys',
+      rule.beyond.offM > 350 && rule.beyond.listed.length === 0,
+      `${rule.beyond.offM} m off route → ${rule.beyond.listed.join(', ') || 'none'}`);
     ok('A pin far from every route lists no jeepneys',
       rule.farAway.offM > 100 && rule.farAway.listed.length === 0,
       `${rule.farAway.offM} m off route → ${rule.farAway.listed.join(', ') || 'none'}`);
-    ok('The pin tapped on the map obeys the same 100 m rule',
-      !!picked && ((picked.offM <= 100) === (picked.near.indexOf(DEV) >= 0)),
+    ok('The pin tapped on the map obeys the same two-tier rule as premade places',
+      !!picked && ((picked.offM <= 350) === (picked.near.indexOf(DEV) >= 0)),
       picked ? `${picked.offM} m off route → ${picked.near.join(', ') || 'none'}` : 'no pin');
     ok('The box shows where the trip is going', !!picked && /Pin on the map/.test(picked.box), picked ? picked.box : '');
     ok('The map draws the destination pin', (await page.locator('#p-map .mk-dest').count()) >= 1);

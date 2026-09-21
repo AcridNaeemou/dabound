@@ -283,8 +283,10 @@
     /* Maps behaviour:
      *   (a) no destination yet -> jeepney dots only, route lines hidden so the map
      *       stays readable; tapping a dot opens that jeepney and its route
-     *   (b) destination chosen  -> only jeepneys whose route really passes it
-     *       (within 100 m) are kept, and those routes are drawn
+     *   (b) destination chosen  -> only jeepneys whose route really passes it are
+     *       kept (within 100 m; relaxed once to 350 m when nothing passes that
+     *       strictly, because built-in place markers are POI centroids that can
+     *       sit a few hundred metres off the road), and those routes are drawn
      *   (c) location shared     -> same as (a) plus the reader's own dot           */
     function draw() {
       if (!kit) return;
