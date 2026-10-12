@@ -221,7 +221,7 @@
         note.style.top = 'auto';
         note.style.bottom = '12px';
         note.style.left = '12px';
-        note.innerHTML = window.Icons.wifiOff(13) + ' Map tiles unavailable — check connection';
+        note.innerHTML = window.Icons.wifiOff(13) + ' Map tiles unavailable. Check connection.';
         el.appendChild(note);
       }
     });
