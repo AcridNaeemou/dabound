@@ -56,7 +56,7 @@
     // padlock that will never help. Say what is actually wrong instead.
     if (inFrame() && (frameBlocksGeo() || (err && err.code === 1)))
       return 'This page is embedded in another page, which blocks location. Open DaBound in its own tab (or in your phone browser) and allow location there.';
-    if (!window.isSecureContext) return 'Location needs a secure page — open DaBound over https:// or on localhost.';
+    if (!window.isSecureContext) return 'Location needs a secure page. Open DaBound over https:// or on localhost.';
     if (err && err.code === 1) return 'Location is blocked for DaBound. Allow it in your browser (padlock in the address bar → Location), then try again. If the app is embedded in another page, open it in its own tab.';
     if (err && err.code === 3) return 'The location fix took too long. Step outside or try again in a moment.';
     return 'Your device could not get a location. Check that Location services are switched on, then try again.';

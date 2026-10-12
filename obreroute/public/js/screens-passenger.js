@@ -739,7 +739,7 @@
           '<div class="track-sub" id="tc-sub">' + UI.esc(vehicle + ' \u00b7 ' + (offline ? 'last seen below' : nearLine)) + '</div>' +
           (!offline && dev.offRoute
             ? '<div class="alert info" style="margin:2px 0 10px">' + window.Icons.info(16) +
-              '<span>This jeepney looks ' + Math.round(dev.offRouteM || 0) + ' m off its usual route — it may be on a detour.</span></div>'
+              '<span>This jeepney looks ' + Math.round(dev.offRouteM || 0) + ' m off its usual route. It may be on a detour.</span></div>'
             : '') +
           (offline
             ? '<div class="alert" style="margin:2px 0 10px">' + window.Icons.wifiOff(16) +
@@ -749,7 +749,7 @@
           UI.statList([
             { k: 'ETA:', v: offline ? 'ETA unavailable' : Geo.formatEta(ctx.etaSec, dev), big: !offline, id: 'tc-eta' },
             { k: 'Distance:', v: Geo.formatDistance(ctx.distanceM), id: 'tc-dist' },
-            { k: 'Average Speed:', v: offline ? '—' : Geo.formatSpeed(dev.speedKmh), id: 'tc-speed' },
+            { k: 'Average Speed:', v: offline ? '-' : Geo.formatSpeed(dev.speedKmh), id: 'tc-speed' },
           ]) +
           '<div class="t-cap" id="tc-age" style="margin-top:10px">' +
             (dev.ageMs != null ? 'Last updated ' + Geo.formatRelative(dev.ageMs) : 'Waiting for GPS\u2026') +
@@ -771,7 +771,7 @@
       var dist = DOM.qs(cardHost, '#tc-dist');
       if (dist) dist.textContent = Geo.formatDistance(ctx.distanceM);
       var sp = DOM.qs(cardHost, '#tc-speed');
-      if (sp) sp.textContent = offline ? '\u2014' : Geo.formatSpeed(dev.speedKmh);
+      if (sp) sp.textContent = offline ? '-' : Geo.formatSpeed(dev.speedKmh);
       var hereSub = DOM.qs(cardHost, '#tc-here-sub');
       if (hereSub && ctx.distanceFromUserM != null) hereSub.textContent = hereText(dev, ctx.distanceFromUserM);
       var eta = DOM.qs(cardHost, '#tc-eta');
@@ -1011,8 +1011,8 @@
       var stops = (route.stops || []).slice().sort(function (a, b) { return a.order - b.order; });
       var endsLabel = UI.routeEnds(route);
       var loopish = endsLabel === 'Loop route';
-      var startN = (route.startPoint && route.startPoint.name) || '—';
-      var endN = (route.endPoint && route.endPoint.name) || '—';
+      var startN = (route.startPoint && route.startPoint.name) || '-';
+      var endN = (route.endPoint && route.endPoint.name) || '-';
 
       el.innerHTML =
         UI.appbar({ title: route.name, subtitle: endsLabel }) +
@@ -1021,13 +1021,13 @@
           '<div class="title-pill" style="margin:14px 0 12px">' + UI.esc(route.name) + '</div>' +
           '<div class="label-box" style="margin-bottom:14px">' +
             (loopish
-              ? '<div class="lb-line">Loop route — this jeepney circles back to where it started</div>'
+              ? '<div class="lb-line">Loop route. This jeepney circles back to where it started.</div>'
               : '<div class="lb-line">Start: ' + UI.esc(startN) + '</div>' +
                 '<div class="lb-line">End: ' + UI.esc(endN) + '</div>') +
           '</div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">' +
             (route.isLoop ? '<span class="pill navy">Loop route</span>' : '') +
-            '<span class="pill">' + (route.distanceM ? (route.distanceM / 1000).toFixed(1) + ' km' : '—') + '</span>' +
+            '<span class="pill">' + (route.distanceM ? (route.distanceM / 1000).toFixed(1) + ' km' : '-') + '</span>' +
             '<span class="pill">' + stops.length + ' stops</span>' +
             (online ? '<span class="pill online"><i class="dot pulse"></i>' + online + ' live now</span>' : '<span class="pill offline"><i class="dot"></i>No live jeepneys</span>') +
           '</div>' +
@@ -1050,7 +1050,7 @@
                 );
               })
               .join('') +
-            (stops.length ? '' : '<div class="t-small" style="padding:2px 0 6px">No stops listed — this jeepney follows the line on the map.</div>') +
+            (stops.length ? '' : '<div class="t-small" style="padding:2px 0 6px">No stops listed. This jeepney follows the line on the map.</div>') +
           '</div>' +
           '<div style="height:12px"></div>' +
         '</div>' +

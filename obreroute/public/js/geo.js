@@ -203,7 +203,7 @@
   }
 
   function formatDistance(m) {
-    if (m == null || !isFinite(m)) return '—';
+    if (m == null || !isFinite(m)) return '-';
     if (m < 60) return 'at the stop';
     if (m < 1000) return Math.round(m / 10) * 10 + ' m away';
     if (m < 10000) return (m / 1000).toFixed(1) + ' km away';
@@ -211,7 +211,7 @@
   }
 
   function formatSpeed(kmh) {
-    if (kmh == null || !isFinite(kmh)) return '—';
+    if (kmh == null || !isFinite(kmh)) return '-';
     return Math.max(0, Math.round(kmh)) + ' km/h';
   }
 

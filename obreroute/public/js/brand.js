@@ -153,13 +153,13 @@
   }
 
   /* keep the document title in sync with the brand constant */
-  try { document.title = BRAND_NAME + ' \u2014 Davao jeepney tracker'; } catch (e) { /* noop */ }
+  try { document.title = BRAND_NAME + ', Davao jeepney tracker'; } catch (e) { /* noop */ }
 
   window.Brand = {
     name: BRAND_NAME,
     setName: function (n) {
       BRAND_NAME = n;
-      try { document.title = n + ' \u2014 Davao jeepney tracker'; } catch (e) { /* noop */ }
+      try { document.title = n + ', Davao jeepney tracker'; } catch (e) { /* noop */ }
     },
     mark: mark,
     jeepArt: jeepArt,

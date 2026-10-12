@@ -25,7 +25,7 @@
     var route = Store.routeById(device.routeId);
     var muted = !device.active;
     var sub =
-      'Driver: ' + UI.esc(device.driver || '—') +
+      'Driver: ' + UI.esc(device.driver || '-') +
       (device.status === 'online' && device.landmark ? ' · Near ' + UI.esc(device.landmark.name) : '');
     return UI.pillRow({
       variant: muted ? 'placeholder' : '',
@@ -104,7 +104,7 @@
       if (!pin) { fail('Type the admin PIN first.'); return; }
       window.API.checkAdminKey(pin)
         .then(function (ok) {
-          if (!ok) { fail('Wrong PIN — try again.'); return; }
+          if (!ok) { fail('Wrong PIN. Try again.'); return; }
           try { localStorage.setItem('dabound.key', pin); } catch (e) { /* private mode */ }
           openAdmin();
         })
@@ -284,7 +284,7 @@
       var shown = devices.slice(0, DEVICE_ROW_CAP);
       return shown.map(function (d) { return adminDeviceRow(d); }).join('') +
         (devices.length > shown.length
-          ? '<div class="t-small" style="padding:8px 4px">…and ' + (devices.length - shown.length) + ' more jeepneys on this route — the live map shows them all.</div>'
+          ? '<div class="t-small" style="padding:8px 4px">…and ' + (devices.length - shown.length) + ' more jeepneys on this route. The live map shows them all.</div>'
           : '');
     }
 
@@ -305,8 +305,8 @@
       Geo.stopMetrics(route).forEach(function (m) { alongS[m.stop.id] = m.s; });
       var endsLabel = UI.routeEnds(route);
       var loopish = endsLabel === 'Loop route';
-      var startN = (route.startPoint && route.startPoint.name) || '—';
-      var endN = (route.endPoint && route.endPoint.name) || '—';
+      var startN = (route.startPoint && route.startPoint.name) || '-';
+      var endN = (route.endPoint && route.endPoint.name) || '-';
       el.innerHTML =
         UI.appbar({ title: 'Route', bare: true }) +
         '<button class="bar-action" data-act="edit" style="border-radius:0;min-height:48px;font-size:var(--f-card)">Edit</button>' +
@@ -315,7 +315,7 @@
           '<div class="title-pill" style="margin:14px 0 12px">' + UI.esc(route.name) + '</div>' +
           '<div class="label-box" style="margin-bottom:14px">' +
             (loopish
-              ? '<div class="lb-line">Loop route — jeepneys circle back to where they started</div>'
+              ? '<div class="lb-line">Loop route. Jeepneys circle back to where they started.</div>'
               : '<div class="lb-line">Start: ' + UI.esc(startN) + '</div>' +
                 '<div class="lb-line">End: ' + UI.esc(endN) + '</div>') +
           '</div>' +
@@ -342,12 +342,12 @@
                 '</div>'
               );
             }).join('') +
-            (stops.length ? '' : '<div class="t-small" style="padding:2px 0 6px">No stops listed — this route is the drawn line only.</div>') +
+            (stops.length ? '' : '<div class="t-small" style="padding:2px 0 6px">No stops listed. This route is the drawn line only.</div>') +
           '</div>' +
           '<div class="section-label">Jeepneys on this route</div>' +
           '<div class="pill-list flush" id="ard-devices">' + devicesBlock(devices) + '</div>' +
           '<div class="section-label">Simulated fleet</div>' +
-          '<div class="t-small" style="padding:2px 0 8px">A route in real life carries hundreds of jeepneys, so you can drop a whole fleet of virtual ones onto the line at once — evenly spaced with a little jitter so they drive like traffic, not like a convoy — and take them all back off when the run is over.</div>' +
+          '<div class="t-small" style="padding:2px 0 8px">A route in real life carries hundreds of jeepneys, so you can drop a whole fleet of virtual ones onto the line at once, evenly spaced with a little jitter so they drive like traffic, not like a convoy, and take them all back off when the run is over.</div>' +
           '<div class="btn-row">' +
             '<input id="ard-fleet-count" type="number" inputmode="numeric" min="1" max="500" step="1" value="25" aria-label="How many jeepneys to drop" style="width:5.5em;min-width:4em" />' +
             '<button class="bar-action" data-act="fleet-add">' + window.Icons.plus(18) + ' Drop fleet</button>' +
@@ -476,9 +476,9 @@
 
     function hintText() {
       if (draft.mode === 'stop') return 'Tap the map to add a stop / landmark passengers will see as "Near X".';
-      if (draft.mode === 'draw') return 'Drag on the map to draw the route freely — close the loop back where you began if it loops.';
+      if (draft.mode === 'draw') return 'Drag on the map to draw the route freely. Close the loop back where you began if it loops.';
       if (draft.mode === 'edit') return 'Drag the red handles to reshape the line, or tap the line to squeeze a new point in between.';
-      if (draft.mode === 'erase') return 'Tap the line where a section is wrong — only that part is removed, the rest of the line stays.';
+      if (draft.mode === 'erase') return 'Tap the line where a section is wrong. Only that part is removed; the rest of the line stays.';
       return 'Draw the route freely, then Stabilize Route snaps whatever you drew onto the roads.';
     }
 
@@ -689,7 +689,7 @@
         paintPoints();
         paintMap();
         UI.toast(
-          (draft.path.length > seg.length ? 'Stroke added — ' : 'Path drawn — ') +
+          (draft.path.length > seg.length ? 'Stroke added: ' : 'Path drawn: ') +
           added + ' new points · ' + draft.path.length + ' total · ' +
           (distanceNow() / 1000).toFixed(1) + ' km'
         );
@@ -744,7 +744,7 @@
               '</div>'
             );
           }).join('')
-        : '<div class="t-small" style="padding:4px 0 8px">No stops yet — they are optional. Draw the route freely with <b>Draw Route</b>.</div>';
+        : '<div class="t-small" style="padding:4px 0 8px">No stops yet. They are optional. Draw the route freely with <b>Draw Route</b>.</div>';
 
       panel.innerHTML =
         '<div class="t-cap" style="margin:0 0 8px;display:flex;gap:8px;align-items:flex-start">' +
@@ -798,7 +798,7 @@
     function handleTap(latlng) {
       if (draft.mode === 'draw' && Date.now() - lastStrokeAt < 700) return;
       if (!draft.mode) {
-        UI.toast('Pick a tool first — Draw Route, Edit Line, Erase Part or Add Stop');
+        UI.toast('Pick a tool first: Draw Route, Edit Line, Erase Part or Add Stop');
         return;
       }
       if (draft.mode === 'edit') {
@@ -814,7 +814,7 @@
         draft.path.splice(at + 1, 0, { lat: ptE.lat, lng: ptE.lng });
         paintPoints();
         paintMap();
-        UI.toast('Point squeezed in — drag the red handles to shape it');
+        UI.toast('Point squeezed in. Drag the red handles to shape it.');
         return;
       }
       if (draft.mode === 'erase') {
@@ -838,12 +838,12 @@
           keep.push(draft.path[vi]);
         }
         if (!removed) { UI.toast('Nothing within ' + BRUSH_M + ' m of that tap along the line'); return; }
-        if (keep.length < 2) { UI.toast('That would erase the whole line — the rest of the route is kept instead'); return; }
+        if (keep.length < 2) { UI.toast('That would erase the whole line. The rest of the route is kept instead.'); return; }
         pushHistory();
         draft.path = keep;
         paintPoints();
         paintMap();
-        UI.toast('Removed ' + removed + ' point' + (removed > 1 ? 's' : '') + ' — Undo brings them back');
+        UI.toast('Removed ' + removed + ' point' + (removed > 1 ? 's' : '') + '. Undo brings them back');
         return;
       }
       pushHistory();
@@ -928,10 +928,10 @@
           applied = true;
           UI.toast('Route stabilized onto real roads (' + before + ' → ' + draft.path.length + ' points)', 'success');
         } else {
-          UI.toast('Road routing offline — your drawn line is kept as is', 'error');
+          UI.toast('Road routing offline. Your drawn line is kept as is.', 'error');
         }
       } catch (e) {
-        UI.toast('Road routing unavailable — your drawn line is kept as is', 'error');
+        UI.toast('Road routing unavailable. Your drawn line is kept as is.', 'error');
       }
       if (tool) tool.innerHTML = window.Icons.spark(17) + ' Stabilize Route';
       if (applied) {
@@ -963,7 +963,7 @@
     async function save() {
       var name = DOM.qs(el, '#re-name').value.trim();
       if (!name) { UI.toast('Route name is required', 'error'); return; }
-      if (draft.path.length < 2) { UI.toast('Draw the route line first — at least two taps', 'error'); return; }
+      if (draft.path.length < 2) { UI.toast('Draw the route line first. At least two taps.', 'error'); return; }
 
       var stops = draft.points.map(function (p, i) {
         return { name: p.name || 'Stop ' + (i + 1), latitude: p.lat, longitude: p.lng, type: p.type === 'landmark' ? 'landmark' : 'stop', order: i + 1 };
@@ -1083,7 +1083,7 @@
           if (e.target.closest('[data-act="delete"]')) {
             var yes = await UI.confirm({
               title: 'Delete route?',
-              message: 'This cannot be undone. Any jeepneys on this route are unassigned — their devices stay in the list.',
+              message: 'This cannot be undone. Any jeepneys on this route are unassigned. Their devices stay in the list.',
               confirmLabel: 'Delete',
               danger: true,
             });
@@ -1214,14 +1214,14 @@
     function facts(d, route) {
       return (
         '<div class="kv"><span class="k">Route</span><span class="v">' + UI.esc(route ? route.name : 'Not assigned') + '</span></div>' +
-        '<div class="kv"><span class="k">Driver</span><span class="v">' + UI.esc(d.driver || '—') + '</span></div>' +
-        '<div class="kv"><span class="k">Near</span><span class="v">' + UI.esc(d.landmark ? d.landmark.name : d.status === 'online' ? 'En route' : '—') + '</span></div>' +
+        '<div class="kv"><span class="k">Driver</span><span class="v">' + UI.esc(d.driver || '-') + '</span></div>' +
+        '<div class="kv"><span class="k">Near</span><span class="v">' + UI.esc(d.landmark ? d.landmark.name : d.status === 'online' ? 'En route' : '-') + '</span></div>' +
         '<div class="kv"><span class="k">Speed</span><span class="v">' + Geo.formatSpeed(d.speedKmh) + '</span></div>' +
-        '<div class="kv"><span class="k">Distance to next stop</span><span class="v">' + (d.distanceToNextStopM != null ? Geo.formatDistance(d.distanceToNextStopM) : '—') + '</span></div>' +
+        '<div class="kv"><span class="k">Distance to next stop</span><span class="v">' + (d.distanceToNextStopM != null ? Geo.formatDistance(d.distanceToNextStopM) : '-') + '</span></div>' +
         '<div class="kv"><span class="k">Last update</span><span class="v">' + (d.ageMs != null ? Geo.formatRelative(d.ageMs) : 'no signal yet') + '</span></div>' +
-        '<div class="kv"><span class="k">Route progress</span><span class="v">' + (d.progressPct != null ? d.progressPct.toFixed(0) + '%' : '—') + '</span></div>' +
+        '<div class="kv"><span class="k">Route progress</span><span class="v">' + (d.progressPct != null ? d.progressPct.toFixed(0) + '%' : '-') + '</span></div>' +
         (d.offRouteM != null && d.offRoute
-          ? '<div class="alert" style="margin-top:10px">' + window.Icons.alert(16) + '<span>Off route by about ' + Math.round(d.offRouteM) + ' m — the jeepney may be detouring, or the GPS fix drifted.</span></div>'
+          ? '<div class="alert" style="margin-top:10px">' + window.Icons.alert(16) + '<span>Off route by about ' + Math.round(d.offRouteM) + ' m. The jeepney may be detouring, or the GPS fix drifted.</span></div>'
           : '') +
         (d.position ? '<div class="kv"><span class="k">GPS (admin view)</span><span class="v">' + d.position.lat.toFixed(5) + ', ' + d.position.lng.toFixed(5) + '</span></div>' : '')
       );
@@ -1352,7 +1352,7 @@
             '<input class="input" id="de-name" placeholder="Type here" value="' + UI.esc(editing ? editing.name : '') + '" /></div>' +
           '<div class="field"><label for="de-driver">Driver:</label>' +
             '<input class="input" id="de-driver" placeholder="Type here" value="' + UI.esc(editing ? editing.driver || '' : '') + '" />' +
-            '<div class="hint">Shown to admins only — never to passengers.</div></div>' +
+            '<div class="hint">Shown to admins only, never to passengers.</div></div>' +
           '<div class="field"><label for="de-route">Route:</label>' +
             '<select class="select" id="de-route">' +
               '<option value="">Type here</option>' +
@@ -1475,9 +1475,9 @@
           '<div class="container bordered-navy" style="margin:2px 14px 12px">' +
           '<div class="container-title" style="font-size:var(--f-section)">' + UI.esc(sel.name) + '</div>' +
           '<div class="container-body">' +
-          '<div class="kv"><span class="k">Route</span><span class="v">' + UI.esc(route ? route.name : '—') + '</span></div>' +
+          '<div class="kv"><span class="k">Route</span><span class="v">' + UI.esc(route ? route.name : '-') + '</span></div>' +
           '<div class="kv"><span class="k">GPS</span><span class="v">' + (sel.status === 'online' ? 'Online' : sel.status === 'connecting' ? 'Connecting' : 'Offline') + '</span></div>' +
-          '<div class="kv"><span class="k">Near</span><span class="v">' + UI.esc(sel.landmark ? sel.landmark.name : '—') + '</span></div>' +
+          '<div class="kv"><span class="k">Near</span><span class="v">' + UI.esc(sel.landmark ? sel.landmark.name : '-') + '</span></div>' +
           '<div class="kv"><span class="k">Speed</span><span class="v">' + Geo.formatSpeed(sel.speedKmh) + '</span></div>' +
           '<div class="kv"><span class="k">Last update</span><span class="v">' + (sel.ageMs != null ? Geo.formatRelative(sel.ageMs) : 'never') + '</span></div>' +
           '<div class="btn-row" style="margin-top:12px">' +
@@ -1534,7 +1534,7 @@
             right: '<button class="icon-btn" data-act="fit" aria-label="Fit all">' + window.Icons.target(20) + '</button>',
           }) +
           '<div class="map-frame" style="padding:0 0 0 0"><div class="map" id="alm-map" style="inset:0 0 46% 0;border-radius:0;border:none"></div></div>' +
-          '<div data-keep-scroll style="position:absolute;left:0;right:0;bottom:0;top:52%;z-index:460;background:#fff;border-top-left-radius:22px;border-top-right-radius:22px;box-shadow:0 -6px 24px rgba(23,59,92,.14);overflow-y:auto" id="alm-sheet"></div>';
+          '<div data-keep-scroll style="position:absolute;left:0;right:0;bottom:0;top:52%;z-index:460;background:#fff;border-top-left-radius:22px;border-top-right-radius:22px;border-top:1.5px solid #d7dde3;overflow-y:auto" id="alm-sheet"></div>';
         kit = window.MapKit.create(DOM.qs(el, '#alm-map'), { center: [7.0858, 125.6175], zoom: 13 });
         renderMap();
         renderSheet();
@@ -1597,7 +1597,7 @@
             UI.statusPill(d, { pulse: true }) +
           '</div>' +
           (d.simulated
-            ? '<div class="alert" style="margin-bottom:12px">' + window.Icons.info(16) + '<span><b>DEV simulator.</b> This jeepney moves on a demo path — no real phone is reporting GPS. Turn the simulator off to use a phone.</span></div>'
+            ? '<div class="alert" style="margin-bottom:12px">' + window.Icons.info(16) + '<span><b>DEV simulator.</b> This jeepney moves on a demo path. No real phone is reporting GPS. Turn the simulator off to use a phone.</span></div>'
             : '') +
           (lastError ? '<div class="alert" style="margin-bottom:12px">' + window.Icons.alert(16) + '<span>' + UI.esc(lastError) + '</span></div>' : '') +
           '<div class="container pad">' +
@@ -1606,8 +1606,8 @@
             '<div class="kv"><span class="k">Last update</span><span class="v">' + (d.ageMs != null ? Geo.formatRelative(d.ageMs) : 'waiting') + '</span></div>' +
             '<div class="kv"><span class="k">Fixes sent</span><span class="v">' + sendCount + (skippedCount ? ' (' + skippedCount + ' rejected)' : '') + '</span></div>' +
             '<div class="kv"><span class="k">Speed</span><span class="v">' + Geo.formatSpeed(d.speedKmh) + '</span></div>' +
-            '<div class="kv"><span class="k">Near</span><span class="v">' + UI.esc(d.landmark ? d.landmark.name : d.status === 'online' ? 'En route' : '—') + '</span></div>' +
-            '<div class="kv"><span class="k">Coordinates (admin view)</span><span class="v">' + (d.position ? d.position.lat.toFixed(5) + ', ' + d.position.lng.toFixed(5) : '—') + '</span></div>' +
+            '<div class="kv"><span class="k">Near</span><span class="v">' + UI.esc(d.landmark ? d.landmark.name : d.status === 'online' ? 'En route' : '-') + '</span></div>' +
+            '<div class="kv"><span class="k">Coordinates (admin view)</span><span class="v">' + (d.position ? d.position.lat.toFixed(5) + ', ' + d.position.lng.toFixed(5) : '-') + '</span></div>' +
           '</div>' +
           '<div class="bar-stack" style="padding:14px 0 0">' +
             (active
@@ -1615,7 +1615,7 @@
               : '<button class="bar-action" data-act="start">Start sharing location</button>') +
           '</div>' +
           '<div class="card" style="margin-top:16px">' +
-            '<span class="t-card" style="display:block;margin-bottom:4px">DEV only — the simulator</span>' +
+            '<span class="t-card" style="display:block;margin-bottom:4px">DEV only: the simulator</span>' +
             '<span class="t-small">For development and demos when no second phone is available: it walks this jeepney along its assigned route so landmark matching and ETA can be demonstrated. It never runs unless you start it, it is labelled <b>DEV</b> everywhere it appears, and real tracking always comes from a phone above.</span>' +
             '<div class="btn-row" style="margin-top:12px">' +
               '<button class="btn sm ' + (d.simulated ? 'danger' : 'secondary') + '" data-act="simulate">' + (d.simulated ? 'Stop simulator' : 'Start simulator') + '</button>' +
@@ -1652,7 +1652,7 @@
               lastError = null;
             }
             render();
-          }).catch(function (e) { lastError = 'Upload failed — ' + e.message; render(); });
+          }).catch(function (e) { lastError = 'Upload failed: ' + e.message; render(); });
           if (sendCount % 2 === 0) render();
         },
         function (err) {
