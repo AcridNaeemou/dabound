@@ -15,13 +15,11 @@
     var el = DOM.el(
       '<div class="screen">' +
         '<div class="center-screen">' +
-          '<div class="brand-word">' + window.Brand.mark(null, 40) + '</div>' +
-          '<div class="road-dots" style="margin-top:6px">' +
-            '<span style="margin-right:6px;color:#F9C74F;display:inline-flex">' + window.Brand.jeepArt('#F9C74F', 58) + '</span>' +
-            '<i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>' +
+          '<div class="brand-word">' + window.Brand.mark(null, 42) + '</div>' +
+          '<div class="road-dots">' +
+            '<span class="splash-jeep">' + window.Brand.jeepArt('#F9C74F', 56) + '</span>' +
+            '<i></i><i></i><i></i><i></i>' +
           '</div>' +
-          '<div class="splash-bar"><i></i></div>' +
-          '<div class="t-cap">Loading routes and jeepneys…</div>' +
         '</div>' +
       '</div>'
     );
@@ -32,8 +30,8 @@
   function roleScreen() {
     var el = DOM.el(
       '<div class="screen">' +
-        '<div class="center-screen">' +
-          '<div class="brand-word" style="margin-bottom:30px">' + window.Brand.mark(null, 38) + '</div>' +
+        '<div class="center-screen role">' +
+          '<div class="brand-word">' + window.Brand.mark(null, 40) + '</div>' +
           '<button class="role-btn" data-nav="map">Are you a user?</button>' +
           '<button class="role-btn" data-nav="admin-login">Are you an admin?</button>' +
         '</div>' +
@@ -128,7 +126,7 @@
         routes.forEach(function (r) { live += Store.devices({ routeId: r.id, activeOnly: true, onlineOnly: true }).length; });
         return (
           '<button class="line-row" data-dest="' + UI.esc(d.id) + '">' +
-          '<span style="flex:none;display:inline-flex">' + window.Icons.pinFilledYellow(26) + '</span>' +
+          '<span class="ico">' + window.Icons.pinFilledYellow(26) + '</span>' +
           '<span class="lr-body">' +
           '<span class="lr-title nowrap">' + UI.esc(d.name) + '</span>' +
           '<span class="lr-sub nowrap">' + UI.esc(d.address || routes.map(function (r) { return r.name; }).join(', ') || 'Davao City') + '</span>' +
@@ -157,6 +155,7 @@
       if (input) {
         var d = destination();
         input.value = d ? (d.custom ? 'Pin on the map' : d.name) : '';
+        input.placeholder = 'Madayaw!';
         input.blur();
       }
       paintDrop();
@@ -181,15 +180,15 @@
     }
 
     function render() {
+      var dest = destination();
       el.innerHTML =
         '<div class="search-wrap">' +
-          '<div class="search-ribbon">' +
-            '<button class="ribbon-exit" data-nav="exit" aria-label="Back to the launch screen">' + window.Icons.chevLeft(22) + '</button>' +
-            '<span class="ribbon-icon">' + window.Icons.search(18) + '</span>' +
-            '<input id="p-search" class="ribbon-input" type="search" autocomplete="off" enterkeyhint="search"' +
+          '<div class="appbar searchable">' +
+            '<span class="appbar-lead brand-lead">' + window.Brand.jeepGlyph(28, '#173B5C') + '</span>' +
+            '<input id="p-search" class="search-field" type="search" autocomplete="off" enterkeyhint="search"' +
               ' placeholder="Madayaw!" aria-label="Search your destination"' +
-              ' value="' + UI.esc(destination() ? destination().name : '') + '" />' +
-            '<button class="ribbon-clear" data-act="clear-search" aria-label="Clear" hidden>' + window.Icons.x(16) + '</button>' +
+              ' value="' + UI.esc(dest ? (dest.custom ? 'Pin on the map' : dest.name) : '') + '" />' +
+            '<button class="clear" data-act="clear-search" aria-label="Clear" hidden>' + window.Icons.x(16) + '</button>' +
           '</div>' +
           '<div class="search-drop" id="p-drop" hidden></div>' +
         '</div>' +
@@ -270,7 +269,7 @@
           var host = DOM.qs(el, '#p-jeeps');
           if (host) host.innerHTML = rowsHtml(sorted());
           paintUnder();
-          UI.toast('Showing jeepneys near you');
+          if (loud) UI.toast('Showing jeepneys near you');
         })
         .catch(function (err) {
           setLocating(false);
@@ -401,6 +400,7 @@
           open = true;
           q = '';
           input.value = '';
+          input.placeholder = 'Type in your Destination.';
           paintDrop();
         });
         input.addEventListener('input', function () {
@@ -505,21 +505,15 @@
   function searchScreen() {
     var el = DOM.el(
       '<div class="screen">' +
-        '<header class="appbar" style="background:#eceef1;border-color:#eceef1">' +
+        '<header class="appbar where-bar">' +
           '<button class="back-chevron" data-nav="back" aria-label="Back">' + window.Icons.chevLeft(26) + '</button>' +
-          '<div class="appbar-title" style="text-align:left">Where to?</div>' +
-          '<span style="width:40px"></span>' +
+          '<input id="d-search" class="search-field" type="search" placeholder="Where to?" autocomplete="off" aria-label="Where to?" />' +
+          '<button class="clear" data-act="clear-search" aria-label="Clear">' + window.Icons.x(18) + '</button>' +
         '</header>' +
-        '<div style="padding:0 14px 10px">' +
-          '<div class="search" style="border:1.5px solid var(--line)">' +
-            '<span class="search-icon">' + window.Icons.search(20) + '</span>' +
-            '<input id="d-search" type="search" placeholder="Type in your Destination." autocomplete="off" />' +
-            '<button class="clear" data-act="clear-search" aria-label="Clear">' + window.Icons.x(18) + '</button>' +
-          '</div>' +
-        '</div>' +
         '<div class="scroll" style="padding:0 14px 16px">' +
           '<div class="container" id="d-results"></div>' +
         '</div>' +
+        bottomNav('map') +
       '</div>'
     );
 
@@ -542,15 +536,12 @@
       host.innerHTML = dests
         .map(function (d) {
           var routes = (d.routeIds || []).map(function (rid) { return Store.routeById(rid); }).filter(Boolean);
-          var live = 0;
-          routes.forEach(function (r) { live += Store.devices({ routeId: r.id, activeOnly: true, onlineOnly: true }).length; });
           return (
             '<button class="line-row" data-dest="' + UI.esc(d.id) + '">' +
-            '<span style="flex:none;display:inline-flex">' + window.Icons.pinFilledYellow(26) + '</span>' +
+            '<span class="ico">' + window.Icons.pinFilledYellow(26) + '</span>' +
             '<span class="lr-body">' +
             '<span class="lr-title nowrap">' + UI.esc(d.name) + '</span>' +
             '<span class="lr-sub nowrap">' + UI.esc(d.address || routes.map(function (r) { return r.name; }).join(', ') || 'Davao City') + '</span>' +
-            (live ? '<span class="pill online" style="margin-top:6px"><i class="dot"></i>' + live + ' jeep' + (live > 1 ? 's' : '') + ' en route</span>' : '') +
             '</span>' +
             '</button>'
           );
@@ -658,9 +649,8 @@
     function paintHeader(dev) {
       var route = dev ? Store.routeById(dev.routeId) : null;
       headerHost.innerHTML = UI.appbar({
-        transparent: true,
         title: 'Amping!',
-        icon: '<span style="display:inline-flex">' + window.Brand.jeepArt('#173B5C', 34) + '</span>',
+        icon: '<span class="ico">' + window.Brand.jeepGlyph(30, '#173B5C') + '</span>',
         right: dev ? UI.statusPill(dev, { trackingLabel: true, lostLabel: true, pulse: true }) : '<span style="width:40px"></span>',
       });
       void route;
@@ -841,7 +831,7 @@
             '<div class="map-controls">' +
               '<button class="icon-btn" data-act="center" aria-label="Center jeep">' + window.Icons.crosshair(20) + '</button>' +
             '</div></div>' +
-          '<div id="t-card" style="flex:0 1 auto;min-height:0;overflow-y:auto"></div>' +
+          '<div id="t-card" class="track-card"></div>' +
           bottomNav('map');
         headerHost = DOM.qs(el, '#t-header');
         cardHost = DOM.qs(el, '#t-card');
@@ -917,14 +907,13 @@
     function render() {
       el.innerHTML =
         '<div class="search-wrap">' +
-          '<div class="search-ribbon">' +
-            '<button class="ribbon-exit" data-nav="exit" aria-label="Back to the launch screen">' + window.Icons.chevLeft(22) + '</button>' +
-            '<span class="ribbon-icon">' + window.Icons.search(18) + '</span>' +
-            '<input id="r-search" class="ribbon-input" type="search" autocomplete="off"' +
+          '<div class="appbar searchable filter">' +
+            '<span class="appbar-lead brand-lead">' + window.Brand.jeepGlyph(26, '#173B5C') + '</span>' +
+            '<input id="r-search" class="search-field" type="search" autocomplete="off"' +
               ' placeholder="Search a route or a stop" aria-label="Search routes"' +
               ' value="' + UI.esc(q) + '" />' +
-            '<button class="ribbon-clear" data-act="clear-search" aria-label="Clear"' + (q ? '' : ' hidden') + '>' + window.Icons.x(16) + '</button>' +
-            '<button class="ribbon-info' + (howto ? ' on' : '') + '" data-act="toggle-howto" aria-label="How to ride"' +
+            '<button class="clear" data-act="clear-search" aria-label="Clear"' + (q ? '' : ' hidden') + '>' + window.Icons.x(16) + '</button>' +
+            '<button class="icon-btn' + (howto ? ' on' : '') + '" data-act="toggle-howto" aria-label="How to ride"' +
               ' aria-expanded="' + howto + '" aria-controls="r-howto">' + window.Icons.info(20) + '</button>' +
           '</div>' +
         '</div>' +

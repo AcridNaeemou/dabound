@@ -222,7 +222,7 @@
   function tipsCard(title) {
     return (
       '<div class="tips">' +
-      '<div class="tips-head">' + window.Icons.jeep(22) +
+      '<div class="tips-head">' + window.Brand.jeepArt('#F9C74F', 28) +
       '<span class="th-title">' + esc(title || window.Brand.name + ' Navigational Tips') + '</span></div>' +
       '<ul>' +
       '<li>Type in your Destination.</li>' +

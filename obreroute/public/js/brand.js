@@ -19,15 +19,19 @@
     );
   }
 
+  /* Front-facing jeepney — the wordmark glyph from the reference deck. */
   function jeepGlyph(size, color) {
+    var c = color || 'currentColor';
     return (
-      '<svg class="wm-jeep-svg" width="' + size + '" height="' + size + '" viewBox="0 0 48 48" aria-hidden="true" ' +
-      'fill="none" stroke="' + color + '" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">' +
-      '<rect x="7" y="14" width="34" height="17" rx="3.5"/>' +
-      '<path d="M7 20h34"/>' +
-      '<path d="M14 14v6M21 14v6M28 14v6M35 14v6"/>' +
-      '<circle cx="15.5" cy="33.5" r="4"/><circle cx="32.5" cy="33.5" r="4"/>' +
-      '<path d="M9.5 24.5h3M35.5 24.5h3"/>' +
+      '<svg class="wm-jeep-svg" width="' + size + '" height="' + Math.round(size * 0.86) + '" viewBox="0 0 52 44" aria-hidden="true" ' +
+      'fill="none" stroke="' + c + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+      '<rect x="6" y="3.5" width="40" height="29" rx="7"/>' +
+      '<path d="M12 8.2h28v9.2H12z"/>' +
+      '<path d="M8 20.5h36"/>' +
+      '<path d="M16 22.5v7.5M21 22.5v7.5M26 22.5v7.5M31 22.5v7.5M36 22.5v7.5"/>' +
+      '<circle cx="12.5" cy="26" r="2.1" fill="' + c + '" stroke="none"/>' +
+      '<circle cx="39.5" cy="26" r="2.1" fill="' + c + '" stroke="none"/>' +
+      '<circle cx="16" cy="38" r="4.2"/><circle cx="36" cy="38" r="4.2"/>' +
       '</svg>'
     );
   }
@@ -42,7 +46,7 @@
     var after = nm.slice(idx + 1);
     return (
       '<span class="wordmark" style="font-size:' + textSize + 'px">' +
-      '<span class="wm-jeep">' + jeepGlyph(Math.round(textSize * 0.92), '#173B5C') + '</span>' +
+      '<span class="wm-jeep">' + jeepGlyph(Math.round(textSize * 1.05), '#173B5C') + '</span>' +
       '<span class="wm-text">' + before +
       '<span class="wm-pin">' + pinGlyph(Math.round(textSize * 0.8), '#F9C74F') + '</span>' + after +
       '</span>' +
